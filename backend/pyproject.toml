@@ -1,0 +1,30 @@
+[project]
+name = "freight-ecommerce-backend"
+version = "0.1.0"
+description = "Local simulated ecommerce - FastAPI bootstrap"
+requires-python = ">=3.11,<3.15"
+dependencies = [
+    "fastapi>=0.115,<1",
+    "pydantic>=2.10,<3",
+    "pydantic-settings>=2.7,<3",
+    "uvicorn>=0.34,<1",
+]
+
+[tool.poetry]
+packages = [{ include = "freight_ecommerce", from = "src" }]
+
+[tool.poetry.group.dev.dependencies]
+pytest = ">=8,<10"
+httpx = ">=0.28,<1"
+ruff = ">=0.11,<1"
+
+[build-system]
+requires = ["poetry-core>=2.0,<3.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+
+[tool.ruff]
+extend = "../.ruff.toml"

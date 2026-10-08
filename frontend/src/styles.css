@@ -1,0 +1,57 @@
+:root {
+  font-family: system-ui, sans-serif;
+  color: #18302b;
+  background: #f1f5f3;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  line-height: 1.6;
+}
+
+body {
+  margin: 0;
+}
+
+main {
+  max-width: 48rem;
+  margin: 4rem auto;
+  padding: 1.5rem;
+}
+
+h1 {
+  line-height: 1.15;
+  font-size: clamp(2rem, 5vw, 3.5rem);
+}
+
+.badge {
+  display: inline-block;
+  padding: 0.4rem 0.8rem;
+  border-radius: 2rem;
+  background: #d9ece3;
+}
+
+section {
+  padding: 1.5rem;
+  margin: 2rem 0;
+  border: 1px solid #bdcdc5;
+  border-radius: 1rem;
+  background: white;
+}
+
+button {
+  padding: 0.75rem 1rem;
+  border: none;
+  border-radius: 0.5rem;
+  font: inherit;
+  color: white;
+  background: #215c47;
+  cursor: pointer;
+}
+
+button:focus-visible {
+  outline: 3px solid #ab671b;
+  outline-offset: 3px;
+}
+
+.note {
+  color: #445f54;
+}
