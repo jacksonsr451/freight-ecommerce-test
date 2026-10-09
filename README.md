@@ -58,14 +58,49 @@ Compose é destinado ao desenvolvimento: PostgreSQL 17, FastAPI e Vite com healt
 Portas podem ser configuradas em `.env` (`POSTGRES_PORT`, `BACKEND_PORT`, `FRONTEND_PORT`).
 Credenciais do exemplo são somente sintéticas/locais. No host, ajuste também `VITE_PROXY_TARGET`
 ao mudar a porta da API. No Compose, proxy usa `http://backend:8000`.
-A aplicação ainda não acessa o banco; não há migrations nesta etapa.
+O domínio e a migration inicial estão implementados. A API de bootstrap ainda não usa o banco;
+o healthcheck não verifica persistência. Migrations não são executadas automaticamente.
+
+## Persistência e migrations (prompt 03)
+
+SQLAlchemy 2 + psycopg, UUIDs locais, centavos inteiros, `timestamptz` UTC e JSONB para snapshots.
+`DATABASE_URL` é exclusiva do backend e aponta ao PostgreSQL **local**; no Compose usa host `db`.
+Os 16 modelos e transições estão em `backend/src/freight_ecommerce/domain/`.
+
+```powershell
+# Após iniciar PostgreSQL local e configurar DATABASE_URL em .env:
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\dev.ps1 Migrate
+# Conferir o estado (a partir desta raiz):
+poetry -C backend run alembic current
+poetry -C backend run alembic check
+```
+
+Para testar persistência, escolha uma configuração de teste local:
+
+```powershell
+# Banco local acessível; testes só criam/removem schemas aleatórios freight_test_* próprios.
+$env:TEST_DATABASE_URL = 'postgresql+psycopg://freight_local:local_demo_only@127.0.0.1:5432/freight_local'
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\dev.ps1 PersistenceCheck
+```
+
+Alternativamente, defina `TEST_POSTGRES_BIN` para a pasta que contém `initdb` e `pg_ctl`:
+a fixture inicia/encerra um cluster temporário próprio em loopback. Sem qualquer variável,
+testes PostgreSQL são **SKIP explícito**, não PASS; testes de domínio/offline continuam executáveis.
+`PersistenceCheck` exige uma dessas variáveis. Para rodar toda a suíte com PostgreSQL,
+defina a variável e use `Check`.
+
+Reversão exclusivamente em banco local descartável: `poetry -C backend run alembic downgrade base`;
+esse comando remove os dados do domínio. A suíte prova reversibilidade dentro de schemas próprios.
+Nenhum seed com dados reais ou credencial Packsenvios é necessário.
+Decisões, invariantes, lacunas e evidências: `docs/architecture/domain-persistence.md`.
 
 ## Convenções e configuração
 
 - Backend em `backend/src/freight_ecommerce`, app factory e schemas Pydantic; pytest em `backend/tests`.
 - Frontend TS strict, ESLint flat config, Prettier; Vitest/jsdom com testes junto aos componentes.
 - Ruff compartilhado em `.ruff.toml`. Scripts de verificação transversal em `tests/`.
-- Backend lê `.env` da raiz; variáveis de processo têm precedência. Configuração ativa: `APP_ENVIRONMENT`.
+- Backend lê `.env` da raiz; variáveis de processo têm precedência. Configurações: `APP_ENVIRONMENT`
+  e `DATABASE_URL` (armazenada como `SecretStr`, sem exposição pelo healthcheck).
 - Vite usa apenas `VITE_*` públicos. Nunca colocar credencial Bearer em variável `VITE_*`.
 - `FREIGHT_*` do exemplo são reservas server-only para etapa posterior, sem adapter neste bootstrap.
 - `.gitignore` exclui `.env`, venvs, node_modules, builds e logs. `.dockerignore` exclui segredos do build.

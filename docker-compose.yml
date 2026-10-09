@@ -24,6 +24,7 @@ services:
       dockerfile: infra/backend.Dockerfile
     environment:
       APP_ENVIRONMENT: development
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-freight_local}:${POSTGRES_PASSWORD:-local_demo_only}@db:5432/${POSTGRES_DB:-freight_local}
       TZ: UTC
     ports:
       - "127.0.0.1:${BACKEND_PORT:-8000}:8000"

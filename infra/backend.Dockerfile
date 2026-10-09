@@ -9,6 +9,8 @@ WORKDIR /app/backend
 COPY backend/pyproject.toml backend/poetry.lock ./
 RUN poetry sync --only main --no-root
 COPY backend/src ./src
+COPY backend/alembic.ini ./
+COPY backend/migrations ./migrations
 RUN poetry install --only main
 
 ENV PATH="/app/backend/.venv/bin:$PATH"

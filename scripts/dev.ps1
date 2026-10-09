@@ -1,6 +1,6 @@
 param(
     [Parameter(Mandatory = $true)]
-    [ValidateSet('Install', 'Check', 'Format', 'Backend', 'Frontend', 'Smoke')]
+    [ValidateSet('Install', 'Check', 'Format', 'Backend', 'Frontend', 'Smoke', 'Migrate', 'PersistenceCheck')]
     [string]$Task
 )
 
@@ -48,5 +48,14 @@ switch ($Task) {
     }
     'Smoke' {
         Invoke-Checked 'poetry' @('-C', $Backend, 'run', 'python', (Join-Path $Root 'tests\smoke_local.py'))
+    }
+    'Migrate' {
+        Invoke-Checked 'poetry' @('-C', $Backend, 'run', 'alembic', 'upgrade', 'head')
+    }
+    'PersistenceCheck' {
+        if (-not $env:TEST_DATABASE_URL -and -not $env:TEST_POSTGRES_BIN) {
+            throw 'Set TEST_DATABASE_URL (loopback PostgreSQL) or TEST_POSTGRES_BIN before PersistenceCheck.'
+        }
+        Invoke-Checked 'poetry' @('-C', $Backend, 'run', 'pytest', '-m', 'postgres')
     }
 }
