@@ -14,6 +14,7 @@ export default defineConfig(({ mode }) => {
     server: { proxy: { '/api': { target } } },
     preview: { proxy: { '/api': { target } } },
     test: {
+      include: ['src/**/*.{test,spec}.{ts,tsx}'],
       environment: 'jsdom',
       setupFiles: ['./src/test/setup.ts'],
       clearMocks: true,

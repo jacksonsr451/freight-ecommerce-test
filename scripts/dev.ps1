@@ -1,6 +1,6 @@
 param(
     [Parameter(Mandatory = $true)]
-    [ValidateSet('Install', 'Check', 'Format', 'Backend', 'Frontend', 'Smoke', 'Migrate', 'PersistenceCheck', 'Seed')]
+    [ValidateSet('Install', 'Check', 'Format', 'Backend', 'Frontend', 'Smoke', 'Migrate', 'PersistenceCheck', 'Seed', 'LayoutCheck')]
     [string]$Task
 )
 
@@ -54,6 +54,9 @@ switch ($Task) {
     }
     'Seed' {
         Invoke-Checked 'poetry' @('-C', $Backend, 'run', 'python', '-m', 'freight_ecommerce.catalog.seed')
+    }
+    'LayoutCheck' {
+        Invoke-Checked 'npm.cmd' @('--prefix', $Frontend, 'run', 'test:layout')
     }
     'PersistenceCheck' {
         if (-not $env:TEST_DATABASE_URL -and -not $env:TEST_POSTGRES_BIN) {

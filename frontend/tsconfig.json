@@ -16,5 +16,5 @@
     "erasableSyntaxOnly": true,
     "types": ["vite/client", "vitest/globals", "@testing-library/jest-dom", "node"]
   },
-  "include": ["src", "vite.config.ts"]
+  "include": ["src", "vite.config.ts", "playwright.config.ts", "tests/layout"]
 }

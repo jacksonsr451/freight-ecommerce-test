@@ -42,7 +42,15 @@ def main() -> None:
         frontend_port = free_port()
     backend_url = f"http://127.0.0.1:{backend_port}"
     frontend_url = f"http://127.0.0.1:{frontend_port}"
-    env = {**os.environ, "APP_ENVIRONMENT": "test", "VITE_PROXY_TARGET": backend_url}
+    env = {
+        **os.environ,
+        "APP_ENVIRONMENT": "test",
+        "VITE_PROXY_TARGET": backend_url,
+        "FREIGHT_MODE": "mock",
+        "FREIGHT_BASE_URL": "https://smoke.mock.invalid",
+        "FREIGHT_API_KEY": "synthetic-smoke-key",
+        "FREIGHT_COMPANY_ID": "00000000-0000-4000-8000-000000000002",
+    }
     processes: list[subprocess.Popen] = []
     try:
         processes.append(
@@ -85,7 +93,11 @@ def main() -> None:
         assert json.loads(get(f"{backend_url}/api/health", processes)) == expected
         assert 'src="/src/main.tsx"' in get(frontend_url, processes)
         assert json.loads(get(f"{frontend_url}/api/health", processes)) == expected
-        print("PASS: FastAPI HTTP, Vite HTML and Vite -> local API proxy")
+        assert json.loads(get(f"{frontend_url}/api/runtime", processes)) == {
+            "freight_mode": "mock",
+            "purchases_simulated": True,
+        }
+        print("PASS: FastAPI HTTP, Vite HTML and local health/runtime proxy")
     finally:
         for process in reversed(processes):
             process.terminate()

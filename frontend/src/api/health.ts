@@ -1,21 +1,12 @@
-export interface HealthResponse {
-  status: 'ok';
-  service: 'freight-ecommerce-test';
-}
+import { z } from 'zod';
+import { requestInternal } from './http';
 
-export async function getHealth(signal: AbortSignal): Promise<HealthResponse> {
-  const response = await fetch('/api/health', { signal, headers: { Accept: 'application/json' } });
-  if (!response.ok) throw new Error('API local indisponível.');
-  const data: unknown = await response.json();
-  if (
-    typeof data !== 'object' ||
-    data === null ||
-    !('status' in data) ||
-    data.status !== 'ok' ||
-    !('service' in data) ||
-    data.service !== 'freight-ecommerce-test'
-  ) {
-    throw new Error('Resposta inválida da API local.');
-  }
-  return { status: data.status, service: data.service };
+const healthSchema = z.object({
+  status: z.literal('ok'),
+  service: z.literal('freight-ecommerce-test'),
+});
+export type HealthResponse = z.infer<typeof healthSchema>;
+
+export function getHealth(signal?: AbortSignal): Promise<HealthResponse> {
+  return requestInternal('/api/health', healthSchema, { signal });
 }

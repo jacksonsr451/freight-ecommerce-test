@@ -2,7 +2,7 @@ import asyncio
 from contextlib import asynccontextmanager
 from typing import Literal
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, Response
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from sqlalchemy import Engine
@@ -14,12 +14,18 @@ from freight_ecommerce.catalog import router
 from freight_ecommerce.config import Settings
 from freight_ecommerce.database import build_engine
 from freight_ecommerce.freight.client import PacksenviosClient
+from freight_ecommerce.freight.config import FreightSettings
 from freight_ecommerce.quoting.router import router as quoting_router
 
 
 class HealthResponse(BaseModel):
     status: Literal["ok"] = "ok"
     service: Literal["freight-ecommerce-test"] = "freight-ecommerce-test"
+
+
+class RuntimeResponse(BaseModel):
+    freight_mode: Literal["mock", "real"]
+    purchases_simulated: Literal[True] = True
 
 
 def create_app(
@@ -89,5 +95,25 @@ def create_app(
     def health() -> HealthResponse:
         """Process liveness only; does not test PostgreSQL or external services."""
         return HealthResponse()
+
+    @app.get("/api/runtime", response_model=RuntimeResponse, tags=["runtime"])
+    def runtime(response: Response) -> RuntimeResponse:
+        """Public mode only, without creating an HTTP client or calling a provider/database."""
+        response.headers["Cache-Control"] = "no-store"
+        try:
+            config = (
+                app.state.freight_client.settings
+                if app.state.freight_client is not None
+                else FreightSettings()
+            )
+        except ValueError:
+            raise HTTPException(
+                503,
+                detail={
+                    "code": "runtime_unavailable",
+                    "message": "Configuração pública de modo indisponível.",
+                },
+            ) from None
+        return RuntimeResponse(freight_mode=config.mode)
 
     return app

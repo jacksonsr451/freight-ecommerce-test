@@ -247,6 +247,39 @@ Reversão 0003 para 0002 exige dados compatíveis com os NOT NULL legados; snaps
 guest não são convertidos em nomes, flags ou clientes fictícios para permitir downgrade.
 Política, consistência e evidências: `docs/architecture/quote-engine.md`.
 
+## Shell frontend e design system (prompt 08)
+
+React Router navega entre `/catalogo`, `/carrinho`, `/checkout`, `/pedidos` e `/diagnostico`;
+`/` redireciona para catálogo e endereços desconhecidos têm recuperação. Header, navegação,
+estados e footer são compartilhados. CSS usa tokens de cor/espaçamento, componentes responsivos,
+foco visível, skip link e menu mobile com Escape. Não há fonte/imagem externa carregada.
+
+TanStack Query compartilha/cacheia health/runtime, com cancelamento e retry manual. O cliente
+frontend usa exclusivamente `/api/...` na mesma origem, não aceita hosts externos nem o grupo
+Packsenvios `/api/v1/freight`, não envia Authorization e não segue redirects.
+Zod valida respostas e formulário de CEP, descartando campos privados adicionais.
+
+`GET /api/runtime` retorna **somente** `freight_mode` e `purchases_simulated=true`, sem abrir conexão
+com provedor/banco. O badge vem dessa resposta, não de variável pública ou valor Mock inventado.
+Enquanto carrega/falha, mostra modo pendente/indisponível. Real significa configuração backend,
+não homologação ou oferta comprovada. Pagamento/compra permanecem locais e simulados.
+
+As páginas comerciais são base visual nesta etapa, com vazios identificados. Catálogo/carrinho
+persistidos serão ligados no prompt 09, checkout completo no 10 e pedidos no 11. O CEP no checkout
+valida apenas formato localmente e não dispara cotação/pagamento. Diagnóstico usa apenas API local.
+
+```powershell
+# Rodar lint, Vitest e build frontend (incluídos em Check):
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\dev.ps1 Check
+# Testes de layout em navegador real:
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\dev.ps1 LayoutCheck
+```
+
+LayoutCheck usa Playwright e Edge headless (`msedge`), disponível neste Windows. Em outra máquina
+com Chromium Playwright instalado, configure `PLAYWRIGHT_BROWSER_CHANNEL=chromium` antes de executar.
+Screenshots/traces são gerados em `frontend/test-results/` e ignorados pelo Git.
+Evidências e decisões: `docs/architecture/frontend-shell.md`.
+
 ## Convenções e configuração
 
 - Backend em `backend/src/freight_ecommerce`, app factory e schemas Pydantic; pytest em `backend/tests`.
