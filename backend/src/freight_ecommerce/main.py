@@ -8,6 +8,7 @@ from sqlalchemy import Engine
 from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm.exc import StaleDataError
 
+from freight_ecommerce.cart.router import router as cart_router
 from freight_ecommerce.catalog import router
 from freight_ecommerce.config import Settings
 from freight_ecommerce.database import build_engine
@@ -47,7 +48,9 @@ def create_app(settings: Settings | None = None, *, engine: Engine | None = None
             status_code=409,
             content={
                 "detail": {
-                    "code": "catalog_conflict",
+                    "code": "cart_conflict"
+                    if request.url.path.startswith("/api/carts")
+                    else "catalog_conflict",
                     "message": "Conflito de cadastro ou atualização concorrente.",
                 }
             },
@@ -67,6 +70,7 @@ def create_app(settings: Settings | None = None, *, engine: Engine | None = None
 
     app.include_router(router.public)
     app.include_router(router.admin)
+    app.include_router(cart_router)
 
     @app.get("/api/health", response_model=HealthResponse, tags=["health"])
     def health() -> HealthResponse:

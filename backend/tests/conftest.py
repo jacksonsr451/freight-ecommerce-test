@@ -14,6 +14,14 @@ from sqlalchemy.orm import Session
 BACKEND = Path(__file__).resolve().parents[1]
 
 
+@pytest.fixture(autouse=True)
+def isolate_freight_test_environment(request, monkeypatch):
+    if request.module.__name__.startswith("test_freight_"):
+        for name in tuple(os.environ):
+            if name.startswith("FREIGHT_"):
+                monkeypatch.delenv(name)
+
+
 def run_postgres_command(arguments, root):
     # File output prevents inherited child pipe handles from blocking communicate() on Windows.
     log = root / "controller.log"

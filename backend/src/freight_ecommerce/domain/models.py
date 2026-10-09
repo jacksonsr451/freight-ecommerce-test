@@ -96,11 +96,23 @@ class Address(MutableRecord, Base):
 
 class Cart(Stateful, MutableRecord, Base):
     __tablename__ = "carts"
-    __table_args__ = (CheckConstraint("revision > 0", name="revision_positive"),)
+    __table_args__ = (
+        CheckConstraint("revision > 0", name="revision_positive"),
+        CheckConstraint(
+            "delivery_address IS NULL OR jsonb_typeof(delivery_address) = 'object'",
+            name="delivery_address_object",
+        ),
+        CheckConstraint(
+            "commercial_fingerprint IS NULL OR char_length(commercial_fingerprint) = 64",
+            name="commercial_fingerprint_length",
+        ),
+    )
     initial_status = CartStatus.ACTIVE
     status: Mapped[CartStatus] = state_column(CartStatus, initial_status)
     customer_id: Mapped[UUID | None] = mapped_column(ForeignKey("customers.id"), index=True)
     revision: Mapped[int] = mapped_column(default=1, server_default="1")
+    delivery_address: Mapped[dict[str, Any] | None] = mapped_column(JSONB(none_as_null=True))
+    commercial_fingerprint: Mapped[str | None] = mapped_column(String(64))
 
 
 class CartItem(MutableRecord, Base):

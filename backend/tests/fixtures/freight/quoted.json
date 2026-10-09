@@ -1,0 +1,35 @@
+{
+  "data": {
+    "id": "00000000-0000-4000-8000-000000000003",
+    "status": "quoted",
+    "criteria": {
+      "freight_company_id": "00000000-0000-4000-8000-000000000002",
+      "freight_location_id": null,
+      "origin_postal_code": "01001000",
+      "destination_postal_code": "20040002",
+      "weight_kg": "1.000",
+      "declared_value_cents": 10000,
+      "length_cm": 20,
+      "width_cm": 15,
+      "height_cm": 10,
+      "volume_count": 1
+    },
+    "options": [
+      {
+        "price_cents": 2590,
+        "deadline_days": 3,
+        "carrier_name": "Transportadora sintética",
+        "private_carrier_id": "00000000-0000-4000-8000-000000000010",
+        "rate_table_id": "00000000-0000-4000-8000-000000000011",
+        "manual_only": true,
+        "demonstration_only": true,
+        "price_source": "private_table",
+        "carrier_workspace_id": null,
+        "calculation_snapshot": {"fixture": "synthetic-not-observed"}
+      }
+    ],
+    "selection": null,
+    "shipment_code": null,
+    "created_at": "2026-10-08T12:00:00+00:00"
+  }
+}

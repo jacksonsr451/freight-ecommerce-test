@@ -11,6 +11,7 @@ dependencies = [
     "sqlalchemy>=2.0,<2.1",
     "alembic>=1.15,<2",
     "psycopg[binary]>=3.2,<4",
+    "httpx>=0.28,<0.29",
 ]
 
 [tool.poetry]
@@ -18,7 +19,6 @@ packages = [{ include = "freight_ecommerce", from = "src" }]
 
 [tool.poetry.group.dev.dependencies]
 pytest = ">=8,<10"
-httpx = ">=0.28,<1"
 ruff = ">=0.11,<1"
 
 [build-system]

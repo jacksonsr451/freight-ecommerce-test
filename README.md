@@ -140,6 +140,79 @@ frontend nem definida em `VITE_*`. Exemplo de corpo de criação (dados somente 
 Produtos inativos retornam 404 na API pública; ativos esgotados aparecem com disponibilidade zero.
 OpenAPI interno: `/docs` e `/openapi.json`. Detalhes/evidências: `docs/architecture/catalog-api.md`.
 
+## Carrinho e cálculo comercial (prompt 05)
+
+Execute `Migrate` para aplicar a revision **0002** antes de usar o carrinho.
+O catálogo deve estar populado (por exemplo, com `Seed`). Endpoints são da loja local:
+
+| Método / caminho | Entrada / comportamento |
+|---|---|
+| `POST /api/carts` | Corpo `{}`; cria carrinho anônimo, revisão 1 |
+| `GET /api/carts/{cart_id}` | Consulta itens, preços/pesos atuais, endereço e totais; sincroniza invalidação se o catálogo mudou |
+| `POST /api/carts/{cart_id}/items` | `product_id`, `quantity`, `expected_revision`; adiciona unidades e junta à linha existente |
+| `PATCH /api/carts/{cart_id}/items/{item_id}` | `quantity`, `expected_revision`; define quantidade absoluta |
+| `DELETE /api/carts/{cart_id}/items/{item_id}?expected_revision=N` | Remove a linha e retorna o carrinho recalculado |
+| `PUT /api/carts/{cart_id}/address` | `expected_revision`, `address` completo ou `null` para limpar |
+
+Cada resposta contém revisão, itens, subtotal em centavos, peso total em gramas, quantidade,
+problemas de disponibilidade, `editable`, `checkout_ready` e `has_current_quote` (metadado local,
+não confirmação de contratação). Preço, peso, medidas e totais **não são aceitos do navegador**.
+
+Todas as alterações exigem revisão atual; conflito retorna **409** e exige refetch. Quantidade
+positiva até 1000 por produto; limite local de 100 produtos distintos. Para remover use DELETE.
+Endereço usa `postal_code` (string de 8 dígitos), `street`, `number`, `district`, `city`, `state`,
+`country: BR` e `complement` opcional. Não recebe seletores de empresa/unidade externa.
+
+O carrinho **não reserva estoque**. Dois carrinhos podem conter o mesmo saldo disponível;
+confirmação de pedido no prompt 11 deverá revalidar sob locks e reservar atomicamente uma única vez.
+Itens que ficaram inativos/esgotados permanecem visíveis com problema, sem permitir checkout.
+Mudanças de quantidade, itens/endereço e critérios do catálogo invalidam cotações/tentativas abertas,
+preservando seus snapshots e IDs. Carrinho encerrado ou já vinculado a pedido não pode ser alterado.
+Detalhes de concorrência, invalidação, migration e evidências: `docs/architecture/cart-commercial.md`.
+
+## Cliente Packsenvios isolado (prompt 06)
+
+O módulo **server-only** `backend/src/freight_ecommerce/freight/` implementa chamadas **de saída**
+POST `/api/v1/freight/quotes` e GET `/api/v1/freight/quotes/{quote_request}` conforme a referência.
+Esses caminhos não foram registrados como rotas públicas da loja. O motor que ligará carrinho,
+persistência e cliente pertence ao prompt 07. Não há compra/seleção/contratação externa neste cliente.
+
+- `FREIGHT_MODE=mock` (default): usa transport HTTP sintético sem rede e sem chave real.
+  `FREIGHT_MOCK_SCENARIO=quoted|unavailable|fiscal_review` seleciona a fixture, não regras comerciais/fiscais.
+- `FREIGHT_MODE=real`: requer `FREIGHT_BASE_URL` (URL da aplicação, sem sufixo API),
+  `FREIGHT_API_KEY` e `FREIGHT_COMPANY_ID` autorizados. Configure unidade quando aplicável.
+  HTTPS é exigido fora de loopback; HTTP só é aceito em localhost/127.0.0.1/::1.
+- `FREIGHT_ORIGIN_POSTAL_CODE` é opcional; sem origem explícita, uma unidade configurada deve
+  permitir a resolução pelo provedor. Empresa sem unidade exige origem no request/configuração.
+- Timeouts: `FREIGHT_TIMEOUT_SECONDS=10`, connect `FREIGHT_CONNECT_TIMEOUT_SECONDS=3`.
+  `FREIGHT_MAX_ATTEMPTS=2` limita retries; `FREIGHT_MAX_RETRY_WAIT_SECONDS=5` limita espera automática.
+  Retry-After maior que o orçamento é devolvido no erro **sem retry antecipado**.
+- Chaves/contexto ficam exclusivamente no backend; nunca criar variáveis `VITE_FREIGHT_*` com segredos.
+
+Exemplo backend, sem acoplamento à loja:
+
+```python
+from uuid import uuid4
+from freight_ecommerce.freight.client import build_freight_client
+from freight_ecommerce.freight.schemas import QuoteRequest
+
+async def quote_backend_example():
+    async with build_freight_client() as client:
+        prepared = client.prepare_quote(QuoteRequest(
+            request_key=uuid4(),  # persistir antes do HTTP no motor 07; não regenerar no retry
+            origin_postal_code="01001000", destination_postal_code="20040002",
+            weight_kg="1.000", declared_value_cents=10000,
+            length_cm=20, width_cm=15, height_cm=10, volume_count=1,
+        ))
+        result = await client.create_quote(prepared)
+        same_quote = await client.get_quote(result.data.id)  # não usar request_key nesta rota
+        return same_quote
+```
+
+Credenciais reais somente de ambiente especificamente autorizado. Código de exemplo por padrão é mock;
+não demonstra acesso, oferta ou homologação. O cliente não publica o resultado bruto no navegador.
+Fixtures, lacunas, logs e evidências: `docs/architecture/freight-client.md`.
+
 ## Convenções e configuração
 
 - Backend em `backend/src/freight_ecommerce`, app factory e schemas Pydantic; pytest em `backend/tests`.
@@ -148,7 +221,7 @@ OpenAPI interno: `/docs` e `/openapi.json`. Detalhes/evidências: `docs/architec
 - Backend lê `.env` da raiz; variáveis de processo têm precedência. Configurações: `APP_ENVIRONMENT`
   e `DATABASE_URL` (armazenada como `SecretStr`, sem exposição pelo healthcheck).
 - Vite usa apenas `VITE_*` públicos. Nunca colocar credencial Bearer em variável `VITE_*`.
-- `FREIGHT_*` do exemplo são reservas server-only para etapa posterior, sem adapter neste bootstrap.
+- `FREIGHT_*` configuram somente o adaptador backend de cotação; conexão com o carrinho fica no prompt 07.
 - `.gitignore` exclui `.env`, venvs, node_modules, builds e logs. `.dockerignore` exclui segredos do build.
 - `manual_only: true` jamais habilita contratação automática; seleção de opção será vínculo local.
 - Ler `docs/reference/gestao-frete-integracao-ecommerce-teste.md` antes da integração externa.
