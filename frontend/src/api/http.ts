@@ -3,15 +3,18 @@ import type { ZodType } from 'zod';
 export class ApiError extends Error {
   readonly code: 'http' | 'network' | 'invalid-response' | 'invalid-path';
   readonly status?: number;
+  readonly domainCode?: string;
   constructor(
     code: 'http' | 'network' | 'invalid-response' | 'invalid-path',
     message: string,
     status?: number,
+    domainCode?: string,
   ) {
     super(message);
     this.name = 'ApiError';
     this.code = code;
     this.status = status;
+    this.domainCode = domainCode;
   }
 }
 
@@ -78,7 +81,44 @@ export async function requestInternal<T>(
       throw error;
     throw new ApiError('network', 'Não foi possível conectar à API local.');
   }
-  if (!response.ok) throw new ApiError('http', httpMessage(response.status), response.status);
+  if (!response.ok) {
+    let code: string | undefined;
+    const known: Record<string, string> = {
+      insufficient_stock: 'Estoque insuficiente. Confira a disponibilidade atual.',
+      product_not_found: 'Produto indisponível ou não encontrado.',
+      product_unavailable: 'O produto ficou indisponível. Atualize o catálogo.',
+      cart_revision_conflict:
+        'O carrinho mudou em outra operação. Os dados foram atualizados; revise antes de tentar novamente.',
+      cart_commercial_changed: 'Preços ou disponibilidade mudaram. Revise o carrinho atualizado.',
+      cart_locked: 'Este carrinho está encerrado e não pode ser alterado.',
+      cart_item_not_found: 'O item não está mais neste carrinho.',
+      item_quantity_limit: 'Limite de 1000 unidades por produto.',
+      cart_item_limit: 'Limite de produtos distintos no carrinho atingido.',
+    };
+    try {
+      const data: unknown = await response.json();
+      if (
+        typeof data === 'object' &&
+        data !== null &&
+        'detail' in data &&
+        typeof data.detail === 'object' &&
+        data.detail !== null &&
+        'code' in data.detail &&
+        typeof data.detail.code === 'string' &&
+        Object.hasOwn(known, data.detail.code)
+      ) {
+        code = data.detail.code;
+      }
+    } catch {
+      /* Never publish raw error bodies. */
+    }
+    throw new ApiError(
+      'http',
+      code ? known[code] : httpMessage(response.status),
+      response.status,
+      code,
+    );
+  }
   try {
     return schema.parse(await response.json());
   } catch {

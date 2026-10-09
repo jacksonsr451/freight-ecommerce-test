@@ -264,8 +264,8 @@ com provedor/banco. O badge vem dessa resposta, não de variável pública ou va
 Enquanto carrega/falha, mostra modo pendente/indisponível. Real significa configuração backend,
 não homologação ou oferta comprovada. Pagamento/compra permanecem locais e simulados.
 
-As páginas comerciais são base visual nesta etapa, com vazios identificados. Catálogo/carrinho
-persistidos serão ligados no prompt 09, checkout completo no 10 e pedidos no 11. O CEP no checkout
+O shell foi criado no prompt 08; catálogo/carrinho foram conectados no 09. Checkout completo fica
+no 10 e pedidos no 11. O CEP no checkout
 valida apenas formato localmente e não dispara cotação/pagamento. Diagnóstico usa apenas API local.
 
 ```powershell
@@ -279,6 +279,34 @@ LayoutCheck usa Playwright e Edge headless (`msedge`), disponível neste Windows
 com Chromium Playwright instalado, configure `PLAYWRIGHT_BROWSER_CHANNEL=chromium` antes de executar.
 Screenshots/traces são gerados em `frontend/test-results/` e ignorados pelo Git.
 Evidências e decisões: `docs/architecture/frontend-shell.md`.
+
+## Frontend catálogo e carrinho (prompt 09)
+
+Com PostgreSQL local migrado e `Seed` executado, `/catalogo` consulta produtos paginados reais da
+API. Busca por nome/SKU e filtro disponíveis/esgotados são aplicados no servidor antes da paginação
+(`GET /api/products?q=...&in_stock=true|false`). `/catalogo/{id}` mostra detalhes, preço, peso,
+dimensões e quantidade; esgotado fica visível, mas não pode ser adicionado.
+
+O primeiro adicionar cria um carrinho via POST `/api/carts`; abrir o carrinho vazio não cria registros.
+Somente UUID validado é persistido em `localStorage` (`freight-lab.cart-id`), sem chave/credencial,
+preço, subtotal ou endereço. Reabrir/recarregar consulta o carrinho no servidor. Referência inválida/
+inexistente tem recuperação explícita; carrinho encerrado não é reaberto silenciosamente.
+
+Mutações são serializadas, sem retry automático. Uma leitura fresca fornece expected_revision antes
+de POST/PATCH/DELETE; só produto/quantidade/revisão são enviados. Não há preço/peso do cliente.
+Não se atualizam itens/totais do cache otimisticamente: rascunho de quantidade é local, receipt
+validado substitui o cache apenas após sucesso. Falha/conflito faz refetch de carrinho/catálogo,
+exibe erro seguro e não reaplica a operação. Estoque insuficiente/inativos bloqueiam continuidade.
+
+Totais em centavos, peso informativo e quantidades vêm da resposta do servidor; Zod verifica
+coerência sem corrigir/fabricar valores. Imagens são ilustrações SVG, não fotos reais de produtos.
+Checkout ainda é a base do próximo prompt; frete não é somado inventando preço zero.
+
+Tests incluem jornada de navegador **real** → API FastAPI **real** → PostgreSQL local com schema
+próprio e seed sintético, verificando adicionar/alterar/remover, reload, subtotal/peso e nenhuma
+reserva. Esse teste roda em `Check` quando PostgreSQL, Node/dependências frontend e Edge estão disponíveis.
+Em ambiente sem esses pré-requisitos, é SKIP explícito, não comprovação de browser.
+Decisões/evidências: `docs/architecture/frontend-store.md`.
 
 ## Convenções e configuração
 

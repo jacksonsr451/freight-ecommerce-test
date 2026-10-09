@@ -1,6 +1,9 @@
 import { expect, test } from '@playwright/test';
 
 test.beforeEach(async ({ page }) => {
+  await page.route('**/api/products?*', (route) =>
+    route.fulfill({ json: { items: [], total: 0, page: 1, page_size: 6, total_pages: 0 } }),
+  );
   // Explicitly synthetic responses to the local public runtime/health contract.
   await page.route('**/api/health', (route) =>
     route.fulfill({ json: { status: 'ok', service: 'freight-ecommerce-test' } }),

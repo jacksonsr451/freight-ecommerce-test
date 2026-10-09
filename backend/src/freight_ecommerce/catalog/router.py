@@ -58,9 +58,15 @@ errors = {
 
 
 @public.get("", response_model=ProductPage, responses={503: {"model": ErrorResponse}})
-def catalog(session: SessionDep, page: PageNumber = 1, page_size: PageSize = 20):
+def catalog(
+    session: SessionDep,
+    page: PageNumber = 1,
+    page_size: PageSize = 20,
+    q: Annotated[str | None, Query(max_length=100)] = None,
+    in_stock: bool | None = None,
+):
     """Only active products; price, measures and stock are read from the server database."""
-    return service.list_products(session, page, page_size)
+    return service.list_products(session, page, page_size, q=q, in_stock=in_stock)
 
 
 @public.get("/{product_id}", response_model=ProductView, responses=errors)

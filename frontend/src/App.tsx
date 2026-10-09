@@ -6,6 +6,7 @@ import CheckoutPage from './pages/CheckoutPage';
 import DiagnosticsPage from './pages/DiagnosticsPage';
 import OrdersPage from './pages/OrdersPage';
 import NotFoundPage from './pages/NotFoundPage';
+import ProductPage from './pages/ProductPage';
 
 export default function App() {
   return (
@@ -13,6 +14,7 @@ export default function App() {
       <Route element={<Shell />}>
         <Route index element={<Navigate to="/catalogo" replace />} />
         <Route path="catalogo" element={<CatalogPage />} />
+        <Route path="catalogo/:productId" element={<ProductPage />} />
         <Route path="carrinho" element={<CartPage />} />
         <Route path="checkout" element={<CheckoutPage />} />
         <Route path="pedidos" element={<OrdersPage />} />

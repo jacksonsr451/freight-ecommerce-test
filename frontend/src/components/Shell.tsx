@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useHealth, useRuntime } from '../lib/runtime-queries';
+import { useCart } from '../cart/queries';
 import { BoxIcon, MenuIcon } from './icons';
 
 const navigation = [
@@ -18,6 +19,7 @@ export default function Shell() {
   const previousPath = useRef(location.pathname);
   const runtime = useRuntime();
   const health = useHealth();
+  const cart = useCart();
   const modeLabel = runtime.isError
     ? 'Modo indisponível'
     : runtime.isPending
@@ -105,6 +107,14 @@ export default function Shell() {
                 }}
               >
                 {label}
+                {path === '/carrinho' && cart.data && !cart.isError && (
+                  <span
+                    className="cart-count"
+                    aria-label={`${cart.data.total_quantity} unidades no carrinho`}
+                  >
+                    {cart.data.total_quantity}
+                  </span>
+                )}
               </NavLink>
             ))}
           </nav>

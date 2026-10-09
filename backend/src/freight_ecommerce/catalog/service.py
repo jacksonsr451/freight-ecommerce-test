@@ -1,7 +1,7 @@
 from uuid import UUID
 
 from fastapi import HTTPException
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from freight_ecommerce.catalog.schemas import (
@@ -60,10 +60,29 @@ def find_product(session: Session, product_id: UUID, *, admin=False, lock=False)
     return row
 
 
-def list_products(session: Session, page: int, page_size: int, *, admin=False):
+def list_products(
+    session: Session,
+    page: int,
+    page_size: int,
+    *,
+    admin=False,
+    q: str | None = None,
+    in_stock: bool | None = None,
+):
     statement = select(Product, Inventory).join(Inventory)
     if not admin:
         statement = statement.where(Product.active.is_(True))
+    if q and q.strip():
+        text = q.strip()
+        statement = statement.where(
+            or_(
+                Product.name.icontains(text, autoescape=True),
+                Product.sku.icontains(text, autoescape=True),
+            )
+        )
+    if in_stock is not None:
+        available = Inventory.on_hand - Inventory.reserved
+        statement = statement.where(available > 0 if in_stock else available == 0)
     total = session.scalar(select(func.count()).select_from(statement.subquery()))
     rows = session.execute(
         statement.order_by(Product.sku, Product.id).offset((page - 1) * page_size).limit(page_size)

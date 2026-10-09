@@ -32,6 +32,10 @@ function successfulApi(mode: 'mock' | 'real' = 'mock') {
           api_key: 'synthetic-private-never-render',
         }),
       );
+    if (path.startsWith('/api/products?'))
+      return new Response(
+        JSON.stringify({ items: [], total: 0, page: 1, page_size: 6, total_pages: 0 }),
+      );
     throw new Error(`Unexpected test route ${path}`);
   });
   vi.stubGlobal('fetch', fetchMock);
@@ -70,6 +74,7 @@ describe('shell de e-commerce local', () => {
     }
     expect(fetchMock.mock.calls.map(([path]) => path).sort()).toEqual([
       '/api/health',
+      '/api/products?page=1&page_size=6',
       '/api/runtime',
     ]);
     expect(screen.queryByText('synthetic-private-never-render')).not.toBeInTheDocument();
@@ -131,7 +136,7 @@ describe('shell de e-commerce local', () => {
     expect(screen.getByRole('heading', { name: 'Vamos voltar ao caminho certo?' })).toBeVisible();
     await user.click(screen.getByRole('link', { name: 'Voltar ao catálogo' }));
     expect(
-      screen.getByRole('heading', { name: 'A vitrine está pronta para receber produtos' }),
+      screen.getByRole('heading', { name: 'Nenhum produto disponível nesta busca' }),
     ).toBeVisible();
   });
 
