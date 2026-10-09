@@ -2,7 +2,7 @@ import hashlib
 import json
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session
 
 from freight_ecommerce.cart.schemas import (
@@ -130,21 +130,23 @@ def invalidate_open_quotes(session: Session, cart: Cart) -> None:
         .order_by(CheckoutAttempt.id)
         .with_for_update()
     ).all()
-    if attempts:
-        quotes = session.scalars(
-            select(FreightQuote)
-            .where(
+    quotes = session.scalars(
+        select(FreightQuote)
+        .where(
+            or_(
+                FreightQuote.cart_id == cart.id,
                 FreightQuote.checkout_attempt_id.in_([attempt.id for attempt in attempts]),
-                FreightQuote.status != QuoteStatus.INVALIDATED,
-            )
-            .order_by(FreightQuote.id)
-            .with_for_update()
-        ).all()
-        for quote in quotes:
-            quote.transition(QuoteStatus.INVALIDATED)  # local state only; preserve criteria and IDs
-        for attempt in attempts:
-            if attempt.status != CheckoutStatus.INVALIDATED:
-                attempt.transition(CheckoutStatus.INVALIDATED)
+            ),
+            FreightQuote.status != QuoteStatus.INVALIDATED,
+        )
+        .order_by(FreightQuote.id)
+        .with_for_update()
+    ).all()
+    for quote in quotes:
+        quote.transition(QuoteStatus.INVALIDATED)  # local state only; preserve criteria and IDs
+    for attempt in attempts:
+        if attempt.status != CheckoutStatus.INVALIDATED:
+            attempt.transition(CheckoutStatus.INVALIDATED)
     if cart.status == CartStatus.CHECKOUT_PENDING:
         cart.transition(CartStatus.ACTIVE)
 
@@ -189,11 +191,20 @@ def render(session: Session, cart: Cart, items: list[CartItemView], editable: bo
         has_quote = (
             session.scalar(
                 select(FreightQuote.id)
-                .join(CheckoutAttempt)
+                .outerjoin(CheckoutAttempt, FreightQuote.checkout_attempt_id == CheckoutAttempt.id)
                 .where(
-                    CheckoutAttempt.cart_id == cart.id,
-                    CheckoutAttempt.cart_revision == cart.revision,
-                    CheckoutAttempt.status == CheckoutStatus.QUOTED,
+                    or_(
+                        and_(
+                            CheckoutAttempt.cart_id == cart.id,
+                            CheckoutAttempt.cart_revision == cart.revision,
+                            CheckoutAttempt.status == CheckoutStatus.QUOTED,
+                        ),
+                        and_(
+                            FreightQuote.cart_id == cart.id,
+                            FreightQuote.cart_fingerprint == cart.commercial_fingerprint,
+                            FreightQuote.external_status == "quoted",
+                        ),
+                    ),
                     FreightQuote.status == QuoteStatus.RECEIVED,
                 )
                 .limit(1)

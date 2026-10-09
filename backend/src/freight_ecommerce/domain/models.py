@@ -10,6 +10,7 @@ from sqlalchemy import (
     ForeignKeyConstraint,
     Index,
     Integer,
+    LargeBinary,
     String,
     Text,
     UniqueConstraint,
@@ -130,6 +131,7 @@ class CheckoutAttempt(Stateful, MutableRecord, Base):
     __tablename__ = "checkout_attempts"
     __table_args__ = (
         UniqueConstraint("id", "customer_id"),
+        UniqueConstraint("id", "cart_id", name="uq_checkout_attempts_id_cart"),
         ForeignKeyConstraint(
             ["address_id", "customer_id"], ["addresses.id", "addresses.customer_id"]
         ),
@@ -156,12 +158,49 @@ class FreightQuote(Stateful, MutableRecord, Base):
         ),
         UniqueConstraint("id", "checkout_attempt_id"),
         CheckConstraint("jsonb_typeof(criteria) = 'object'", name="criteria_object"),
+        CheckConstraint("mode IS NULL OR mode IN ('mock', 'real')", name="mode_values"),
+        CheckConstraint(
+            "(prepared_payload IS NULL AND criteria_fingerprint IS NULL "
+            "AND cart_fingerprint IS NULL AND mode IS NULL) OR "
+            "(prepared_payload IS NOT NULL AND cart_id IS NOT NULL "
+            "AND criteria_fingerprint IS NOT NULL AND cart_fingerprint IS NOT NULL "
+            "AND char_length(criteria_fingerprint) = 64 "
+            "AND char_length(cart_fingerprint) = 64 AND mode IS NOT NULL)",
+            name="prepared_context",
+        ),
+        CheckConstraint(
+            "(inflight_token IS NULL AND inflight_until IS NULL) OR "
+            "(inflight_token IS NOT NULL AND inflight_until IS NOT NULL)",
+            name="lease_pair",
+        ),
+        ForeignKeyConstraint(
+            ["selected_option_snapshot_id", "id"],
+            ["freight_option_snapshots.id", "freight_option_snapshots.quote_id"],
+            name="fk_freight_quotes_local_selection",
+            use_alter=True,
+        ),
+        Index("ix_freight_quotes_cart_criteria", "cart_id", "criteria_fingerprint"),
+        ForeignKeyConstraint(
+            ["checkout_attempt_id", "cart_id"],
+            ["checkout_attempts.id", "checkout_attempts.cart_id"],
+            name="fk_freight_quotes_attempt_cart",
+        ),
     )
     initial_status = QuoteStatus.REQUESTED
     status: Mapped[QuoteStatus] = state_column(QuoteStatus, initial_status)
-    checkout_attempt_id: Mapped[UUID] = mapped_column(
-        ForeignKey("checkout_attempts.id"), index=True
+    checkout_attempt_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("checkout_attempts.id"), index=True, active_history=True
     )
+    cart_id: Mapped[UUID | None] = mapped_column(ForeignKey("carts.id"), index=True)
+    prepared_payload: Mapped[bytes | None] = mapped_column(LargeBinary)
+    criteria_fingerprint: Mapped[str | None] = mapped_column(String(64))
+    cart_fingerprint: Mapped[str | None] = mapped_column(String(64))
+    mode: Mapped[str | None] = mapped_column(String(8))
+    selected_option_snapshot_id: Mapped[UUID | None] = mapped_column()
+    inflight_token: Mapped[UUID | None] = mapped_column()
+    inflight_until: Mapped[datetime | None] = mapped_column(UTCDateTime())
+    last_error_code: Mapped[str | None] = mapped_column(String(64))
+    retry_not_before: Mapped[datetime | None] = mapped_column(UTCDateTime())
     # Local integration namespace, never sent as a tenant selector to Packsenvios.
     integration_scope: Mapped[str] = mapped_column(String(128))
     request_key: Mapped[UUID] = mapped_column()
@@ -178,6 +217,7 @@ class FreightOptionSnapshot(Record, Base):
     __table_args__ = (
         UniqueConstraint("quote_id", "option_index"),
         UniqueConstraint("id", "quote_id", "price_cents"),
+        UniqueConstraint("id", "quote_id", name="uq_freight_options_id_quote"),
         CheckConstraint("option_index >= 0", name="option_index_nonnegative"),
         CheckConstraint("price_cents >= 0", name="price_nonnegative"),
         CheckConstraint("deadline_days IS NULL OR deadline_days >= 0", name="deadline_nonnegative"),
@@ -187,14 +227,18 @@ class FreightOptionSnapshot(Record, Base):
     option_index: Mapped[int] = mapped_column(Integer)
     price_cents: Mapped[int] = mapped_column(BigInteger)
     deadline_days: Mapped[int | None] = mapped_column(Integer)
-    carrier_name: Mapped[str] = mapped_column(String(160))
-    manual_only: Mapped[bool] = mapped_column(Boolean)
-    demonstration_only: Mapped[bool] = mapped_column(Boolean)
+    carrier_name: Mapped[str | None] = mapped_column(Text)
+    manual_only: Mapped[bool | None] = mapped_column(Boolean)
+    demonstration_only: Mapped[bool | None] = mapped_column(Boolean)
     weight_only: Mapped[bool] = mapped_column(Boolean)
     payload: Mapped[dict[str, Any]] = mapped_column(JSONB)
 
     def require_automatic_contract_eligibility(self) -> None:
-        if self.manual_only or self.demonstration_only or self.weight_only:
+        if (
+            self.manual_only is not False
+            or self.demonstration_only is not False
+            or self.weight_only
+        ):
             raise ValueError("Offer is not eligible for automatic contracting")
         # No contract adapter exists: absence of flags does not establish external eligibility.
         raise NotImplementedError("TODO-CONTRACT: external eligibility is not implemented")
@@ -410,7 +454,16 @@ def protect_snapshots(session, flush_context, instances):
                 raise SnapshotImmutableError("Persisted snapshot is immutable")
         frozen_fields = ()
         if isinstance(entity, FreightQuote):
-            frozen_fields = ("criteria", "request_key", "integration_scope", "checkout_attempt_id")
+            frozen_fields = (
+                "criteria",
+                "request_key",
+                "integration_scope",
+                "cart_id",
+                "prepared_payload",
+                "criteria_fingerprint",
+                "cart_fingerprint",
+                "mode",
+            )
         if isinstance(entity, Order):
             frozen_fields = (
                 "submission_key",
@@ -430,7 +483,7 @@ def protect_snapshots(session, flush_context, instances):
                 raise SnapshotImmutableError(f"Persisted {field} is immutable")
         stable_ids = ()
         if isinstance(entity, FreightQuote):
-            stable_ids = ("external_quote_request_id", "response")
+            stable_ids = ("external_quote_request_id", "response", "checkout_attempt_id")
         if isinstance(entity, ShipmentImportBatch):
             stable_ids = ("external_batch_id", "external_dispatch_request_id")
         if isinstance(entity, Fulfillment):

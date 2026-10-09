@@ -1,3 +1,4 @@
+import asyncio
 from contextlib import asynccontextmanager
 from typing import Literal
 
@@ -12,6 +13,8 @@ from freight_ecommerce.cart.router import router as cart_router
 from freight_ecommerce.catalog import router
 from freight_ecommerce.config import Settings
 from freight_ecommerce.database import build_engine
+from freight_ecommerce.freight.client import PacksenviosClient
+from freight_ecommerce.quoting.router import router as quoting_router
 
 
 class HealthResponse(BaseModel):
@@ -19,7 +22,12 @@ class HealthResponse(BaseModel):
     service: Literal["freight-ecommerce-test"] = "freight-ecommerce-test"
 
 
-def create_app(settings: Settings | None = None, *, engine: Engine | None = None) -> FastAPI:
+def create_app(
+    settings: Settings | None = None,
+    *,
+    engine: Engine | None = None,
+    freight_client: PacksenviosClient | None = None,
+) -> FastAPI:
     settings = settings if settings is not None else Settings()
     owns_engine = engine is None
     engine = engine if engine is not None else build_engine(settings)  # No connection at startup.
@@ -29,6 +37,8 @@ def create_app(settings: Settings | None = None, *, engine: Engine | None = None
         try:
             yield
         finally:
+            if freight_client is None and app.state.freight_client is not None:
+                await app.state.freight_client.aclose()
             if owns_engine:
                 app.state.engine.dispose()
 
@@ -40,6 +50,8 @@ def create_app(settings: Settings | None = None, *, engine: Engine | None = None
     )
     app.state.settings = settings
     app.state.engine = engine
+    app.state.freight_client = freight_client
+    app.state.freight_client_lock = asyncio.Lock()
 
     @app.exception_handler(IntegrityError)
     @app.exception_handler(StaleDataError)
@@ -71,6 +83,7 @@ def create_app(settings: Settings | None = None, *, engine: Engine | None = None
     app.include_router(router.public)
     app.include_router(router.admin)
     app.include_router(cart_router)
+    app.include_router(quoting_router)
 
     @app.get("/api/health", response_model=HealthResponse, tags=["health"])
     def health() -> HealthResponse:

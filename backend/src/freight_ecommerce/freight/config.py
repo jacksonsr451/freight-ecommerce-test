@@ -1,9 +1,9 @@
 from ipaddress import ip_address
-from typing import Literal
+from typing import Annotated, Literal
 from urllib.parse import unquote, urlsplit
 from uuid import UUID
 
-from pydantic import Field, SecretStr, field_validator, model_validator
+from pydantic import Field, SecretStr, StringConstraints, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from freight_ecommerce.config import ROOT
@@ -31,6 +31,9 @@ class FreightSettings(BaseSettings):
     max_attempts: int = Field(default=2, ge=1, le=3)
     max_retry_wait_seconds: float = Field(default=5, ge=0, le=60)
     mock_scenario: Literal["quoted", "unavailable", "fiscal_review"] = "quoted"
+    integration_scope: Annotated[str, StringConstraints(min_length=1, max_length=128)] = (
+        "local-freight"
+    )
 
     @field_validator("base_url")
     @classmethod

@@ -36,6 +36,7 @@ services:
       FREIGHT_MAX_ATTEMPTS: ${FREIGHT_MAX_ATTEMPTS:-2}
       FREIGHT_MAX_RETRY_WAIT_SECONDS: ${FREIGHT_MAX_RETRY_WAIT_SECONDS:-5}
       FREIGHT_MOCK_SCENARIO: ${FREIGHT_MOCK_SCENARIO:-quoted}
+      FREIGHT_INTEGRATION_SCOPE: ${FREIGHT_INTEGRATION_SCOPE:-local-freight}
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-freight_local}:${POSTGRES_PASSWORD:-local_demo_only}@db:5432/${POSTGRES_DB:-freight_local}
       TZ: UTC
     ports:

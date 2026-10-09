@@ -77,6 +77,19 @@ class PacksenviosClient:
     async def aclose(self) -> None:
         await self._http.aclose()
 
+    @property
+    def integration_scope(self) -> str:
+        """Local organization/environment namespace; never a request tenant selector or key hash."""
+        value = json.dumps(
+            {
+                "mode": self.settings.mode,
+                "base": self._base,
+                "organization": self.settings.integration_scope,
+            },
+            sort_keys=True,
+        )
+        return f"{self.settings.mode}:{hashlib.sha256(value.encode()).hexdigest()}"
+
     def prepare_quote(self, request: QuoteRequest) -> PreparedQuote:
         if request.freight_company_id is not None and request.freight_company_id != self._company:
             raise ValueError("Quote company differs from the configured backend context")

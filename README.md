@@ -213,6 +213,40 @@ Credenciais reais somente de ambiente especificamente autorizado. Código de exe
 não demonstra acesso, oferta ou homologação. O cliente não publica o resultado bruto no navegador.
 Fixtures, lacunas, logs e evidências: `docs/architecture/freight-client.md`.
 
+## Motor de cotação e snapshots (prompt 07)
+
+Aplicar `Migrate` para a revision **0003**. Carrinho com produtos ativos/estoque e destino válido
+pode ser cotado pelas rotas **locais** abaixo, usando o adapter configurado no backend:
+
+| Método / caminho | Corpo / comportamento |
+|---|---|
+| `POST /api/carts/{cart_id}/freight-quotes` | `expected_revision`, `packing_mode` opcional e `refresh` opcional |
+| `GET /api/carts/{cart_id}/freight-quotes/{quote_reference}` | Consulta/revalida dados persistidos, sem chamar provedor |
+| `POST /api/carts/{cart_id}/freight-quotes/{quote_reference}/selection` | `expected_revision`, `option_reference`; escolha local por snapshot |
+
+Modo padrão `equal_volumes`: cada unidade é um volume com peso/medidas cadastrados; todas devem ter
+a mesma geometria. Volumes divergentes retornam 422, sem pacote agregado inventado. O comprador pode
+pedir explicitamente `packing_mode: "weight_only"` para estimativa sem cubagem; ela não fecha pedido.
+Não se aceita preço, CEP, peso/dimensões ou empresa/unidade nesse POST: vêm do carrinho/catalog/config.
+
+O servidor salva bytes canônicos/request_key antes de HTTP e os snapshots antes de responder.
+Repetir os mesmos critérios retorna cotação persistida; timeout reusa os mesmos bytes/chave.
+Mudança de carrinho/configuração ou `refresh: true` exige nova chave. Chamada concorrente em andamento
+retorna 202 pending com a mesma referência, sem segundo HTTP; resposta tardia não revive cotação invalidada.
+Cliente deve respeitar 409/refetch e Retry-After. `FREIGHT_INTEGRATION_SCOPE` é namespace local estável
+da organização/ambiente, não seletor de tenant enviado à Packsenvios.
+
+O navegador recebe apenas referências internas, preço, prazo, nome e flags. `manual_only` pode ser
+escolhido **localmente** para a compra simulada, sem POST de seleção/contratação externo. Flags ausentes
+continuam desconhecidas, exigindo revisão; não são inventadas como false. Cotação não reserva estoque.
+Sem oferta e fiscal_review retornam lista vazia; não é gerado frete zero/fallback.
+
+Carrinhos anônimos geram Quote ligado diretamente ao Cart; nenhuma identidade de cliente é fabricada.
+O vínculo com CheckoutAttempt real será preenchido uma única vez no checkout posterior.
+Reversão 0003 para 0002 exige dados compatíveis com os NOT NULL legados; snapshots opcionais/cotações
+guest não são convertidos em nomes, flags ou clientes fictícios para permitir downgrade.
+Política, consistência e evidências: `docs/architecture/quote-engine.md`.
+
 ## Convenções e configuração
 
 - Backend em `backend/src/freight_ecommerce`, app factory e schemas Pydantic; pytest em `backend/tests`.
