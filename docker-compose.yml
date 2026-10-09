@@ -24,6 +24,7 @@ services:
       dockerfile: infra/backend.Dockerfile
     environment:
       APP_ENVIRONMENT: development
+      LOCAL_ADMIN_KEY: ${LOCAL_ADMIN_KEY:-}
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-freight_local}:${POSTGRES_PASSWORD:-local_demo_only}@db:5432/${POSTGRES_DB:-freight_local}
       TZ: UTC
     ports:

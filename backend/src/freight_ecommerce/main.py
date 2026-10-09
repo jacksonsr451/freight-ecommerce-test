@@ -1,9 +1,16 @@
+from contextlib import asynccontextmanager
 from typing import Literal
 
 from fastapi import FastAPI
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
+from sqlalchemy import Engine
+from sqlalchemy.exc import IntegrityError, OperationalError
+from sqlalchemy.orm.exc import StaleDataError
 
+from freight_ecommerce.catalog import router
 from freight_ecommerce.config import Settings
+from freight_ecommerce.database import build_engine
 
 
 class HealthResponse(BaseModel):
@@ -11,13 +18,55 @@ class HealthResponse(BaseModel):
     service: Literal["freight-ecommerce-test"] = "freight-ecommerce-test"
 
 
-def create_app(settings: Settings | None = None) -> FastAPI:
+def create_app(settings: Settings | None = None, *, engine: Engine | None = None) -> FastAPI:
+    settings = settings if settings is not None else Settings()
+    owns_engine = engine is None
+    engine = engine if engine is not None else build_engine(settings)  # No connection at startup.
+
+    @asynccontextmanager
+    async def lifespan(app):
+        try:
+            yield
+        finally:
+            if owns_engine:
+                app.state.engine.dispose()
+
     app = FastAPI(
         title="Freight Ecommerce Test - Local API",
         version="0.1.0",
-        description="Local bootstrap. Purchases and payments will be simulated.",
+        description="Local simulated ecommerce. Catalog values are authoritative on the server.",
+        lifespan=lifespan,
     )
-    app.state.settings = settings if settings is not None else Settings()
+    app.state.settings = settings
+    app.state.engine = engine
+
+    @app.exception_handler(IntegrityError)
+    @app.exception_handler(StaleDataError)
+    async def constraint_conflict(request, error):
+        return JSONResponse(
+            status_code=409,
+            content={
+                "detail": {
+                    "code": "catalog_conflict",
+                    "message": "Conflito de cadastro ou atualização concorrente.",
+                }
+            },
+        )
+
+    @app.exception_handler(OperationalError)
+    async def database_unavailable(request, error):
+        return JSONResponse(
+            status_code=503,
+            content={
+                "detail": {
+                    "code": "database_unavailable",
+                    "message": "Banco local indisponível.",
+                }
+            },
+        )
+
+    app.include_router(router.public)
+    app.include_router(router.admin)
 
     @app.get("/api/health", response_model=HealthResponse, tags=["health"])
     def health() -> HealthResponse:

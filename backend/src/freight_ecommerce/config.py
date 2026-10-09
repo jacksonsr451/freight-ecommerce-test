@@ -1,7 +1,7 @@
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field, SecretStr
+from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -15,6 +15,7 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
         env_prefix="APP_",
         extra="ignore",
+        hide_input_in_errors=True,
     )
 
     environment: Literal["development", "test", "production"] = "development"
@@ -22,3 +23,11 @@ class Settings(BaseSettings):
         default="postgresql+psycopg://freight_local:local_demo_only@127.0.0.1:5432/freight_local",
         validation_alias="DATABASE_URL",
     )
+    local_admin_key: SecretStr = Field(default="", validation_alias="LOCAL_ADMIN_KEY")
+
+    @field_validator("local_admin_key")
+    @classmethod
+    def check_local_admin_key(cls, value: SecretStr) -> SecretStr:
+        if value.get_secret_value() and len(value.get_secret_value()) < 32:
+            raise ValueError("Local admin key must have at least 32 characters or be empty")
+        return value

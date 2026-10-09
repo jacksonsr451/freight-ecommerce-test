@@ -22,7 +22,9 @@ async def test_local_health_and_openapi_do_not_expose_backend_secret(monkeypatch
         assert response.json() == {"status": "ok", "service": "freight-ecommerce-test"}
         schema = await client.get("/openapi.json")
         assert schema.status_code == 200
-        assert set(schema.json()["paths"]) == {"/api/health"}
+        assert "/api/health" in schema.json()["paths"]
+        assert "/api/products" in schema.json()["paths"]
+        assert not any("/freight/" in path for path in schema.json()["paths"])
         assert sentinel not in response.text + schema.text
 
 

@@ -94,6 +94,52 @@ esse comando remove os dados do domínio. A suíte prova reversibilidade dentro 
 Nenhum seed com dados reais ou credencial Packsenvios é necessário.
 Decisões, invariantes, lacunas e evidências: `docs/architecture/domain-persistence.md`.
 
+## Catálogo e estoque (prompt 04)
+
+Depois de migrar o PostgreSQL **local**, carregue os produtos sintéticos:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\dev.ps1 Seed
+```
+
+O seed cria sete produtos com preços/pesos/dimensões variados, incluindo esgotado e inativo.
+É idempotente: não sobrescreve preço, estoque, reservas ou status já alterados por um operador.
+Seed é explícito, nunca executado no startup; recusa produção e URL externa de banco.
+
+| Método / caminho local | Uso |
+|---|---|
+| `GET /api/products?page=1&page_size=20` | Lista pública, somente ativos, até 100 itens/página |
+| `GET /api/products/{id}` | Produto ativo com preço, medidas e estoque disponível |
+| `POST /api/products/{id}/stock-check` | Corpo `{"quantity": 2}`; valida estoque e calcula subtotal/peso no servidor |
+| `GET /api/admin/products` e `GET /api/admin/products/{id}` | Consulta administrativa, inclui inativos/reservas |
+| `POST /api/admin/products` | Cria produto e inventário atomicamente |
+| `PATCH /api/admin/products/{id}` | Atualização parcial, sem campos nulos ou controle de reservas pelo cliente |
+| `DELETE /api/admin/products/{id}` | Exclusão lógica; preserva IDs e referências históricas |
+
+Para o CRUD administrativo em desenvolvimento/testes, defina `LOCAL_ADMIN_KEY` (ao menos 32
+caracteres) em `.env` e envie o header `X-Local-Admin-Key`. Vazio desabilita a administração;
+em produção ela é bloqueada. Essa chave **não** é a credencial Packsenvios, não é enviada ao
+frontend nem definida em `VITE_*`. Exemplo de corpo de criação (dados somente sintéticos):
+
+```json
+{
+  "sku": "DEMO-EXAMPLE",
+  "name": "Produto sintético",
+  "price_cents": 2590,
+  "weight_grams": 1000,
+  "length_cm": 20,
+  "width_cm": 15,
+  "height_cm": 10,
+  "stock_on_hand": 5,
+  "status": "active"
+}
+```
+
+`stock-check` não aceita preço/medidas do cliente e **não reserva estoque**. Disponibilidade é
+`on_hand - reserved`; revalidação/reserva na confirmação do pedido pertencem aos prompts 05/11.
+Produtos inativos retornam 404 na API pública; ativos esgotados aparecem com disponibilidade zero.
+OpenAPI interno: `/docs` e `/openapi.json`. Detalhes/evidências: `docs/architecture/catalog-api.md`.
+
 ## Convenções e configuração
 
 - Backend em `backend/src/freight_ecommerce`, app factory e schemas Pydantic; pytest em `backend/tests`.
