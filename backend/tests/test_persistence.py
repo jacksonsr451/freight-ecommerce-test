@@ -21,7 +21,8 @@ pytestmark = pytest.mark.postgres
 def test_all_entities_roundtrip_uuid_utc_snapshots_and_distinct_external_ids(session):
     graph = make_graph(session)
     for table in Base.metadata.sorted_tables:
-        assert session.scalar(select(func.count()).select_from(table)) == 1
+        expected = 0 if table.name == "stock_reservations" else 1
+        assert session.scalar(select(func.count()).select_from(table)) == expected
     ids = {
         "request_key": graph.quote.request_key,
         "quote_resource": graph.quote.external_quote_request_id,

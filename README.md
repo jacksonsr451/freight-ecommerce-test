@@ -25,8 +25,9 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\dev.ps1 Smoke
 ```
 
 Saia de venvs de outros projetos antes de `Install`. Poetry cria `backend/.venv`.
-`Install` usa `poetry sync` e `npm ci`. `Check` confere locks, lint, formatação,
-testes, typecheck/build e matriz contratual. `Format` aplica formatters.
+`Install` usa `poetry sync` e `npm ci`. `BackendCheck` usa Poetry/Ruff/pytest somente sob `backend/`;
+`FrontendCheck` usa npm scripts somente sob `frontend/`. `Check` executa ambos e valida a matriz.
+`Format` aplica formatters.
 `Smoke` inicia FastAPI/Vite em portas locais livres, verifica HTTP e proxy e encerra seus processos.
 `-ExecutionPolicy Bypass` vale apenas para o processo de PowerShell iniciado.
 
@@ -334,6 +335,32 @@ obtém revisão do servidor e chama o orquestrador interno. Seleciona `option_re
 revisão. Alterar dados após cotar oculta ofertas imediatamente, invalida a tentativa no backend e
 uma nova cotação usa novo UUID. Resposta/local state não afirma contratação externa.
 
+## Pagamento simulado e pedidos (prompt 11)
+
+- `POST /api/carts/{cart_id}/orders`: corpo somente `{expected_revision, submission_key}`. Cria pedido
+  local + `PaymentSimulation(simulation=true,status=pending)`. A chave é UUID própria da loja.
+  Repetição idêntica retorna mesmo pedido; mesma chave com outro carrinho/revisão retorna 409.
+- `POST /api/orders/{order_id}/confirm`: `{expected_cart_revision, outcome}` onde outcome é decisão
+  explícita `pending|approved|declined` do **simulador local**, nunca um gateway financeiro.
+- `GET /api/orders/{order_id}` e `GET /api/carts/{cart_id}/orders?page=1&page_size=20`: confirmação
+  e histórico do carrinho UUID local.
+- `POST /api/orders/{order_id}/cancel`: cancelamento local compensatório, somente antes de fulfillment
+  avançar, com liberação idempotente das reservas ativas.
+
+Pedido congela linhas/preços/produtos, endereço de envio e snapshot local selecionado. No modo aprovação
+simulada, o servidor relê catálogo/carrinho/quote e opção sob locks, valida revisão, fingerprint, estoque
+e soma antes de gravar pedido pago simulado, fulfillment local e reservas numa transação. Pending/declined
+não reservam. Compra/pagamento são simulados; até seleção `manual_only` é somente vínculo local, sem
+POST de seleção/contratação Packsenvios.
+
+`frontend/src/api/orders.ts` e confirmação/histórico mostram `simulation=true` e guardam uma chave de
+criação estável em sessionStorage por carrinho/revisão somente até sucesso; nunca guardam dados de
+pagamento ou credenciais. Não há formulário de cartão/gateway. Esquema/reservas: revision 0005;
+detalhes, compensação, testes e limitações em `docs/architecture/orders-simulation.md`.
+
+Downgrade da revision 0005 é bloqueado quando há orders/payments/reservations, para não descartar
+evidência local de idempotência/compensação inadvertidamente. Só em schema realmente vazio é reversível.
+
 ## Convenções e configuração
 
 - Backend em `backend/src/freight_ecommerce`, app factory e schemas Pydantic; pytest em `backend/tests`.
@@ -342,7 +369,7 @@ uma nova cotação usa novo UUID. Resposta/local state não afirma contratação
 - Backend lê `.env` da raiz; variáveis de processo têm precedência. Configurações: `APP_ENVIRONMENT`
   e `DATABASE_URL` (armazenada como `SecretStr`, sem exposição pelo healthcheck).
 - Vite usa apenas `VITE_*` públicos. Nunca colocar credencial Bearer em variável `VITE_*`.
-- `FREIGHT_*` configuram somente o adaptador backend de cotação; conexão com o carrinho fica no prompt 07.
+- `FREIGHT_*` configuram somente o adaptador backend de cotação; conexão com carrinho no 07.
 - `.gitignore` exclui `.env`, venvs, node_modules, builds e logs. `.dockerignore` exclui segredos do build.
 - `manual_only: true` jamais habilita contratação automática; seleção de opção será vínculo local.
 - Ler `docs/reference/gestao-frete-integracao-ecommerce-teste.md` antes da integração externa.

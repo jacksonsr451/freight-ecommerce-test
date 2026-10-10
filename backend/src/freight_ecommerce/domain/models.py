@@ -285,6 +285,17 @@ class Order(Stateful, MutableRecord, Base):
         CheckConstraint(
             "jsonb_typeof(shipping_address_snapshot) = 'object'", name="address_object"
         ),
+        CheckConstraint(
+            "cart_revision IS NULL OR cart_revision > 0", name="cart_revision_positive"
+        ),
+        CheckConstraint(
+            "cart_fingerprint IS NULL OR char_length(cart_fingerprint) = 64",
+            name="cart_fingerprint_length",
+        ),
+        CheckConstraint(
+            "submission_fingerprint IS NULL OR char_length(submission_fingerprint) = 64",
+            name="submission_fingerprint_length",
+        ),
     )
     initial_status = OrderStatus.PAYMENT_PENDING
     status: Mapped[OrderStatus] = state_column(OrderStatus, initial_status)
@@ -299,6 +310,9 @@ class Order(Stateful, MutableRecord, Base):
     total_cents: Mapped[int] = mapped_column(BigInteger)
     simulation: Mapped[bool] = mapped_column(default=True, server_default=text("true"))
     shipping_address_snapshot: Mapped[dict[str, Any]] = mapped_column(JSONB)
+    cart_revision: Mapped[int | None] = mapped_column(Integer)
+    submission_fingerprint: Mapped[str | None] = mapped_column(String(64))
+    cart_fingerprint: Mapped[str | None] = mapped_column(String(64))
 
 
 class OrderItem(Record, Base):
@@ -325,6 +339,7 @@ class OrderItem(Record, Base):
 class PaymentSimulation(Stateful, MutableRecord, Base):
     __tablename__ = "payment_simulations"
     __table_args__ = (
+        UniqueConstraint("order_id"),
         ForeignKeyConstraint(["order_id", "amount_cents"], ["orders.id", "orders.total_cents"]),
         CheckConstraint("simulation AND amount_cents >= 0", name="simulation_amount"),
     )
@@ -334,6 +349,25 @@ class PaymentSimulation(Stateful, MutableRecord, Base):
     idempotency_key: Mapped[UUID] = mapped_column(unique=True)
     amount_cents: Mapped[int] = mapped_column(BigInteger)
     simulation: Mapped[bool] = mapped_column(default=True, server_default=text("true"))
+
+
+class StockReservation(MutableRecord, Base):
+    """Local, compensatable reservation made only when a simulated payment is approved."""
+
+    __tablename__ = "stock_reservations"
+    __table_args__ = (
+        UniqueConstraint("order_id", "product_id"),
+        CheckConstraint("quantity > 0", name="quantity_positive"),
+        CheckConstraint(
+            "(active AND released_at IS NULL) OR (NOT active AND released_at IS NOT NULL)",
+            name="release_timestamp_pair",
+        ),
+    )
+    order_id: Mapped[UUID] = mapped_column(ForeignKey("orders.id"), index=True)
+    product_id: Mapped[UUID] = mapped_column(ForeignKey("products.id"), index=True)
+    quantity: Mapped[int] = mapped_column(Integer)
+    active: Mapped[bool] = mapped_column(Boolean, default=True, server_default=text("true"))
+    released_at: Mapped[datetime | None] = mapped_column(UTCDateTime())
 
 
 class ShipmentImportBatch(Stateful, MutableRecord, Base):

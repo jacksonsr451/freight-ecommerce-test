@@ -17,6 +17,20 @@ try {
       checkoutWrites.push(body);
       assert.deepEqual(Object.keys(body).sort(), ['address', 'buyer', 'expected_revision']);
     }
+    if (url.pathname.endsWith('/orders') && request.method() === 'POST') {
+      const body = request.postDataJSON();
+      assert.deepEqual(Object.keys(body).sort(), ['expected_revision', 'submission_key']);
+      assert.match(body.submission_key, /^[0-9a-f-]{36}$/i);
+    }
+    if (url.pathname.endsWith('/confirm') && request.method() === 'POST') {
+      const body = request.postDataJSON();
+      assert.deepEqual(Object.keys(body).sort(), ['expected_cart_revision', 'outcome']);
+      assert.equal(body.outcome, 'approved');
+    }
+    if (url.pathname.endsWith('/cancel') && request.method() === 'POST') {
+      const body = request.postDataJSON();
+      assert.deepEqual(Object.keys(body), ['expected_cart_revision']);
+    }
     if (url.pathname.includes('/items') && request.method() !== 'GET') {
       const body = request.postDataJSON();
       writes.push({ method: request.method(), body });
@@ -93,6 +107,17 @@ try {
   await expect(page.getByRole('complementary', { name: 'Resumo do checkout' })).toContainText(
     '25,90',
   );
+  await page.getByRole('button', { name: 'Criar pedido local simulado' }).click();
+  await expect(page.getByRole('heading', { name: 'Resumo do pedido' })).toBeVisible();
+  await expect(page.getByText('Aguardando decisão do simulador')).toBeVisible();
+  await expect(page.getByText(/Gateway inexistente/)).toBeVisible();
+  await page.getByRole('button', { name: 'Simular aprovado' }).click();
+  await expect(page.getByText('Pagamento aprovado (simulação local)')).toBeVisible();
+  await expect(page.getByText('pago simulado · evento de origem simulated')).toBeVisible();
+  await page.getByRole('button', { name: /Cancelar pedido local/ }).click();
+  await expect(page.getByText('Pedido cancelado (simulação local)')).toBeVisible();
+  await page.getByRole('link', { name: 'Ver histórico local' }).click();
+  await expect(page.getByRole('link', { name: /Pedido local/ })).toBeVisible();
   assert(checkoutWrites.some((body) => body.buyer.email === 'buyer@example.com'));
   await page.screenshot({
     path: process.env.LIVE_STORE_SCREENSHOT.replace('cart-live-mobile', 'checkout-live-mobile'),

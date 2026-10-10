@@ -1,5 +1,5 @@
 import { QueryClientProvider } from '@tanstack/react-query';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, expect, it, vi } from 'vitest';
@@ -33,6 +33,9 @@ async function setup(status = 'quoted', httpError?: number) {
     revision,
     buyer_details: buyer,
     delivery_address: address,
+    checkout_ready: Boolean(
+      buyer && address && server.cart().items.every((item) => item.problem === null),
+    ),
   });
   let result = {
     quote_reference: REF,
@@ -67,6 +70,38 @@ async function setup(status = 'quoted', httpError?: number) {
           ]
         : [],
   };
+  const localOrder = {
+    id: '00000000-0000-4000-8000-000000000300',
+    status: 'payment_pending',
+    simulation: true,
+    created_at: '2026-10-09T12:00:00+00:00',
+    cart_revision: 3,
+    subtotal_cents: 4590,
+    freight_cents: 2590,
+    total_cents: 7180,
+    selected_option_reference: OPTION,
+    freight_review_required: true,
+    shipping_destination: { postal_code: '01001000', city: 'São Paulo', state: 'SP' },
+    items: [
+      {
+        product_id: BOOK,
+        sku: 'SYNTHETIC-BOOK',
+        name: 'Livro sintético',
+        quantity: 1,
+        unit_price_cents: 4590,
+        line_total_cents: 4590,
+        product_snapshot: { synthetic_fixture: true },
+      },
+    ],
+    payment: {
+      id: '00000000-0000-4000-8000-000000000302',
+      status: 'pending',
+      amount_cents: 7180,
+      simulation: true,
+    },
+    fulfillment: null,
+    cancellation_reason: null,
+  };
   const control: { delay: Promise<void> | null } = { delay: null };
   const response = (body: unknown, code = 200, headers = {}) =>
     new Response(JSON.stringify(body), { status: code, headers });
@@ -75,6 +110,8 @@ async function setup(status = 'quoted', httpError?: number) {
     vi.fn(async (path: string, options: RequestInit = {}) => {
       const body = options.body ? JSON.parse(String(options.body)) : null;
       calls.push({ path, method: options.method ?? 'GET', body });
+      if (path.endsWith('/orders') && options.method === 'POST') return response(localOrder, 201);
+      if (path === `/api/orders/${localOrder.id}`) return response(localOrder);
       if (path === `/api/carts/${CART}`) return response(current());
       if (path.endsWith('/checkout-details')) {
         const changed =
@@ -217,6 +254,27 @@ it('recalcula ao mudar endereço e oculta seleção antiga até receber nova cot
   const address = calls.filter((call) => call.path.endsWith('/checkout-details')).at(-1)?.body
     ?.address as { postal_code?: string } | undefined;
   expect(address?.postal_code).toBe('20040002');
+});
+
+it('cria um pedido somente local com chave idempotente própria e navega à confirmação', async () => {
+  const { user, calls } = await setup();
+  await fill(user);
+  await user.click(screen.getByRole('button', { name: 'Salvar dados e cotar' }));
+  await user.click(await screen.findByRole('button', { name: /Selecionar oferta 1/ }));
+  const createButton = await screen.findByRole('button', { name: 'Criar pedido local simulado' });
+  await waitFor(() => expect(createButton).toBeEnabled());
+  await user.click(createButton);
+  expect(await screen.findByRole('heading', { name: 'Resumo do pedido' })).toBeVisible();
+  const createRequest = calls.find(
+    (call) => call.method === 'POST' && call.path.endsWith('/orders'),
+  )!;
+  expect(Object.keys(createRequest.body ?? {}).sort()).toEqual([
+    'expected_revision',
+    'submission_key',
+  ]);
+  expect(createRequest.body?.submission_key).toMatch(/^[0-9a-f-]{36}$/i);
+  expect(createRequest.body).not.toHaveProperty('price_cents');
+  expect(screen.getByText(/Gateway inexistente/)).toBeVisible();
 });
 
 it.each(['unavailable', 'fiscal_review'])(

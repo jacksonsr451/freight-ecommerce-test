@@ -5,6 +5,7 @@ import CartPage from './pages/CartPage';
 import CheckoutPage from './pages/CheckoutPage';
 import DiagnosticsPage from './pages/DiagnosticsPage';
 import OrdersPage from './pages/OrdersPage';
+import OrderPage from './pages/OrderPage';
 import NotFoundPage from './pages/NotFoundPage';
 import ProductPage from './pages/ProductPage';
 
@@ -18,6 +19,7 @@ export default function App() {
         <Route path="carrinho" element={<CartPage />} />
         <Route path="checkout" element={<CheckoutPage />} />
         <Route path="pedidos" element={<OrdersPage />} />
+        <Route path="pedidos/:orderId" element={<OrderPage />} />
         <Route path="diagnostico" element={<DiagnosticsPage />} />
         <Route path="*" element={<NotFoundPage />} />
       </Route>

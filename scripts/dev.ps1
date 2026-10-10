@@ -1,6 +1,6 @@
 param(
     [Parameter(Mandatory = $true)]
-    [ValidateSet('Install', 'Check', 'Format', 'Backend', 'Frontend', 'Smoke', 'Migrate', 'PersistenceCheck', 'Seed', 'LayoutCheck')]
+    [ValidateSet('Install', 'Check', 'BackendCheck', 'FrontendCheck', 'Format', 'Backend', 'Frontend', 'Smoke', 'Migrate', 'PersistenceCheck', 'Seed', 'LayoutCheck')]
     [string]$Task
 )
 
@@ -24,16 +24,23 @@ switch ($Task) {
         Invoke-Checked 'npm.cmd' @('--prefix', $Frontend, 'ci')
     }
     'Check' {
+        Invoke-Checked 'powershell.exe' @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $PSCommandPath, '-Task', 'BackendCheck')
+        Invoke-Checked 'powershell.exe' @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $PSCommandPath, '-Task', 'FrontendCheck')
+        Invoke-Checked 'poetry' @('-C', $Backend, 'run', 'python', (Join-Path $Root 'tests\validate_contract_matrix.py'))
+    }
+    'BackendCheck' {
         Invoke-Checked 'poetry' @('-C', $Backend, 'check', '--lock')
         Invoke-Checked 'poetry' @('-C', $Backend, 'run', 'ruff', 'check', '.')
         Invoke-Checked 'poetry' @('-C', $Backend, 'run', 'ruff', 'format', '--check', '.')
         Invoke-Checked 'poetry' @('-C', $Backend, 'run', 'ruff', 'check', (Join-Path $Root 'tests'))
         Invoke-Checked 'poetry' @('-C', $Backend, 'run', 'ruff', 'format', '--check', (Join-Path $Root 'tests'))
         Invoke-Checked 'poetry' @('-C', $Backend, 'run', 'pytest')
+        Invoke-Checked 'poetry' @('-C', $Backend, 'run', 'python', (Join-Path $Root 'tests\validate_contract_matrix.py'))
+    }
+    'FrontendCheck' {
         foreach ($Script in @('lint', 'format:check', 'test', 'build')) {
             Invoke-Checked 'npm.cmd' @('--prefix', $Frontend, 'run', $Script)
         }
-        Invoke-Checked 'poetry' @('-C', $Backend, 'run', 'python', (Join-Path $Root 'tests\validate_contract_matrix.py'))
     }
     'Format' {
         Invoke-Checked 'poetry' @('-C', $Backend, 'run', 'ruff', 'format', '.')

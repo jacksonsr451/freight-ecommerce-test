@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { ApiError } from '../api/http';
 import { getCart } from '../api/store';
 import type { Cart } from '../api/store';
 import { createQuote, getQuote, saveCheckout, selectQuoteOption } from '../api/checkout';
+import { createLocalOrder } from '../api/orders';
 import type { CheckoutFields, PackingMode, Quote } from '../api/checkout';
 import { cartKey, useCart, useCartBusy } from '../cart/queries';
 import { useCartReference } from '../cart/reference';
@@ -21,10 +22,24 @@ function errorMessage(error: Error | null) {
     : 'Não foi possível concluir esta operação local.';
 }
 
+function localSubmissionKey(cartId: string, revision: number): string {
+  const storageKey = `freight-lab.order-submission.${cartId}.${revision}`;
+  try {
+    const existing = sessionStorage.getItem(storageKey);
+    if (existing && /^[0-9a-f-]{36}$/i.test(existing)) return existing;
+    const key = crypto.randomUUID();
+    sessionStorage.setItem(storageKey, key);
+    return key;
+  } catch {
+    return crypto.randomUUID();
+  }
+}
+
 export default function CheckoutPage() {
   const id = useCartReference();
   const cart = useCart();
   const client = useQueryClient();
+  const navigate = useNavigate();
   const cartBusy = useCartBusy();
   const [dirty, setDirty] = useState(false);
   const [detailsStale, setDetailsStale] = useState(false);
@@ -136,6 +151,36 @@ export default function CheckoutPage() {
       return { response: await selectQuoteOption(latest, reference!, option), current: latest };
     },
     onSuccess: ({ response, current }) => receive(response, current, packing),
+    onError: reconcile,
+  });
+
+  const createOrder = useMutation({
+    mutationKey: ['local-order-create'],
+    retry: false,
+    mutationFn: async (input: { cart: Cart; key: string }) => {
+      const latest = await client.fetchQuery({
+        queryKey: cartKey(input.cart.id),
+        queryFn: ({ signal }) => getCart(input.cart.id, signal),
+        staleTime: 0,
+      });
+      if (latest.revision !== input.cart.revision) {
+        throw new ApiError(
+          'http',
+          'O carrinho mudou. Revise e atualize a cotação.',
+          409,
+          'cart_revision_conflict',
+        );
+      }
+      return createLocalOrder(latest.id, latest.revision, input.key);
+    },
+    onSuccess: (order) => {
+      try {
+        sessionStorage.removeItem(`freight-lab.order-submission.${id}.${order.cart_revision}`);
+      } catch {
+        /* Optional storage. */
+      }
+      navigate(`/pedidos/${order.id}`);
+    },
     onError: reconcile,
   });
 
@@ -394,6 +439,50 @@ export default function CheckoutPage() {
               </fieldset>
             )}
           </section>
+          {selected && (
+            <section className="surface-card order-create-panel" aria-label="Pedido local simulado">
+              <p className="eyebrow">Compra exclusivamente local</p>
+              <h2>Pronto para criar o pedido de teste?</h2>
+              <p>
+                Pagamento simulado pela loja. Esta ação não contrata frete nem envia pedido à
+                Packsenvios.
+              </p>
+              {selected.manual_review_required && (
+                <p className="notice">
+                  Esta oferta exige operação manual; o pedido registra apenas o vínculo local ao
+                  snapshot.
+                </p>
+              )}
+              <Button
+                disabled={
+                  cartBusy ||
+                  save.isPending ||
+                  calculate.isPending ||
+                  selection.isPending ||
+                  quoted.isFetching ||
+                  createOrder.isPending ||
+                  !current.checkout_ready ||
+                  dirty ||
+                  detailsStale ||
+                  selected.weight_only
+                }
+                onClick={() =>
+                  createOrder.mutate({
+                    cart: current,
+                    key: localSubmissionKey(current.id, current.revision),
+                  })
+                }
+              >
+                {createOrder.isPending ? 'Criando pedido local…' : 'Criar pedido local simulado'}
+              </Button>
+              {createOrder.isError && (
+                <p role="alert" className="cart-error">
+                  {errorMessage(createOrder.error)} A chave idempotente desta revisão será
+                  reutilizada ao tentar novamente.
+                </p>
+              )}
+            </section>
+          )}
         </div>
         <aside className="cart-summary" aria-label="Resumo do checkout">
           <p className="eyebrow">Compra simulada</p>

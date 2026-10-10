@@ -19,9 +19,18 @@ from freight_ecommerce.domain.models import (
     CartItem,
     FreightOptionSnapshot,
     FreightQuote,
+    Fulfillment,
     Inventory,
     Order,
     PaymentSimulation,
+    StockReservation,
+    TrackingEvent,
+)
+from freight_ecommerce.domain.states import (
+    CartStatus,
+    FulfillmentStatus,
+    OrderStatus,
+    PaymentStatus,
 )
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -139,8 +148,26 @@ def test_store_journey_in_real_browser_uses_real_api_and_postgres(db_engine, tmp
                 assert quote is not None and quote.selected_option_snapshot_id is not None
                 option = session.get(FreightOptionSnapshot, quote.selected_option_snapshot_id)
                 assert option.manual_only is True and option.demonstration_only is True
-                assert session.scalar(select(func.count()).select_from(Order)) == 0
-                assert session.scalar(select(func.count()).select_from(PaymentSimulation)) == 0
+                order = session.scalar(select(Order))
+                assert order.status == OrderStatus.CANCELLED and order.simulation is True
+                payment = session.scalar(
+                    select(PaymentSimulation).where(PaymentSimulation.order_id == order.id)
+                )
+                assert payment.status == PaymentStatus.APPROVED and payment.simulation is True
+                fulfillment = session.scalar(
+                    select(Fulfillment).where(Fulfillment.order_id == order.id)
+                )
+                assert fulfillment.status == FulfillmentStatus.CANCELLED
+                assert cart.status == CartStatus.CHECKED_OUT
+                reservation = session.scalar(
+                    select(StockReservation).where(StockReservation.order_id == order.id)
+                )
+                assert (
+                    reservation is not None
+                    and not reservation.active
+                    and reservation.released_at is not None
+                )
+                assert session.scalar(select(func.count()).select_from(TrackingEvent)) == 2
                 assert all(stock.reserved == 0 for stock in session.scalars(select(Inventory)))
         finally:
             for process in reversed(processes):
