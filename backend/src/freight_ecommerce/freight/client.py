@@ -5,7 +5,7 @@ import logging
 import re
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import httpx
 
@@ -23,7 +23,11 @@ from freight_ecommerce.freight.imports import (
     TrackingRefreshQueued,
     TrackingSnapshot,
 )
-from freight_ecommerce.freight.logging import protect_transport_logs, transport_logging_scope
+from freight_ecommerce.freight.logging import (
+    correlation_id_scope,
+    protect_transport_logs,
+    transport_logging_scope,
+)
 from freight_ecommerce.freight.schemas import PreparedQuote, QuoteEnvelope, QuoteRequest
 from freight_ecommerce.freight.synthetic import (
     SYNTHETIC_COMPANY_ID,
@@ -204,6 +208,15 @@ class PacksenviosClient:
         files=None,
         json=None,
     ):
+        correlation_id = correlation_id_scope.get() or str(uuid4())
+        logger.info(
+            "freight_request",
+            extra={
+                "correlation_id": correlation_id,
+                "operation": f"order_import_{method.lower()}",
+                "phase": "request",
+            },
+        )
         scope = transport_logging_scope.set(True)
         try:
             response = await self._http.request(
@@ -215,11 +228,29 @@ class PacksenviosClient:
                 json=json,
             )
         except httpx.TimeoutException:
+            logger.info(
+                "freight_operation",
+                extra={
+                    "correlation_id": correlation_id,
+                    "operation": f"order_import_{method.lower()}",
+                    "outcome": "timeout",
+                    "http_status": None,
+                },
+            )
             raise FreightError(
                 "import_timeout",
                 "Importação sem confirmação de resposta; consulte o lote antes de repetir.",
             ) from None
         except httpx.RequestError:
+            logger.info(
+                "freight_operation",
+                extra={
+                    "correlation_id": correlation_id,
+                    "operation": f"order_import_{method.lower()}",
+                    "outcome": "transport_error",
+                    "http_status": None,
+                },
+            )
             raise FreightError(
                 "import_transport_error",
                 "Falha de comunicação na importação; consulte o lote antes de repetir.",
@@ -227,19 +258,43 @@ class PacksenviosClient:
         finally:
             transport_logging_scope.reset(scope)
         if response.status_code != expected_status:
-            raise self._http_error(response)
+            failure = self._http_error(response)
+            logger.info(
+                "freight_operation",
+                extra={
+                    "correlation_id": correlation_id,
+                    "operation": f"order_import_{method.lower()}",
+                    "outcome": failure.code,
+                    "http_status": response.status_code,
+                    "retry_after_seconds": failure.retry_after_seconds,
+                },
+            )
+            raise failure
         try:
             result = response_model.model_validate(response.json())
         except (ValueError, TypeError):
+            logger.info(
+                "freight_operation",
+                extra={
+                    "correlation_id": correlation_id,
+                    "operation": f"order_import_{method.lower()}",
+                    "outcome": "import_invalid_response",
+                    "http_status": response.status_code,
+                },
+            )
             raise FreightError(
                 "import_invalid_response",
                 "Resposta de importação fora do contrato documentado.",
                 http_status=response.status_code,
             ) from None
         logger.info(
-            "freight operation=order_import_%s outcome=success status=%d",
-            method.lower(),
-            response.status_code,
+            "freight_operation",
+            extra={
+                "correlation_id": correlation_id,
+                "operation": f"order_import_{method.lower()}",
+                "outcome": "success",
+                "http_status": response.status_code,
+            },
         )
         return result
 
@@ -335,9 +390,19 @@ class PacksenviosClient:
 
     async def _send(self, method, path, content=None, *, params=None) -> QuoteEnvelope:
         waited = 0.0
+        correlation_id = correlation_id_scope.get() or str(uuid4())
         for attempt in range(1, self.settings.max_attempts + 1):
             failure = None
             response = None
+            logger.info(
+                "freight_request",
+                extra={
+                    "correlation_id": correlation_id,
+                    "operation": f"quote_{method.lower()}",
+                    "attempt": attempt,
+                    "phase": "request",
+                },
+            )
             scope = transport_logging_scope.set(True)
             try:
                 response = await self._http.request(
@@ -369,19 +434,28 @@ class PacksenviosClient:
                         )
                     else:
                         logger.info(
-                            "freight operation=%s attempt=%d outcome=success status=200",
-                            method,
-                            attempt,
+                            "freight_operation",
+                            extra={
+                                "correlation_id": correlation_id,
+                                "operation": f"quote_{method.lower()}",
+                                "attempt": attempt,
+                                "outcome": "success",
+                                "http_status": 200,
+                            },
                         )
                         return result
                 else:
                     failure = self._http_error(response)
             logger.info(
-                "freight operation=%s attempt=%d outcome=%s status=%s",
-                method,
-                attempt,
-                failure.code,
-                failure.http_status,
+                "freight_operation",
+                extra={
+                    "correlation_id": correlation_id,
+                    "operation": f"quote_{method.lower()}",
+                    "attempt": attempt,
+                    "outcome": failure.code,
+                    "http_status": failure.http_status,
+                    "retry_after_seconds": failure.retry_after_seconds,
+                },
             )
             retryable = failure.code in {"timeout", "transport_error"} or failure.http_status in {
                 429,

@@ -32,6 +32,22 @@ function successfulApi(mode: 'mock' | 'real' = 'mock') {
           api_key: 'synthetic-private-never-render',
         }),
       );
+    if (path === '/api/diagnostics')
+      return new Response(
+        JSON.stringify({
+          generated_at: '2026-10-10T12:00:00+00:00',
+          freight_mode: mode,
+          purchases_simulated: true,
+          checks: [
+            { name: 'api', status: 'ok', latency_ms: 1, details: { process: 'running' } },
+            { name: 'postgresql', status: 'ok', latency_ms: 2, details: { query: 'SELECT 1' } },
+            { name: 'external_api', status: 'not_checked', latency_ms: null, details: {} },
+          ],
+          operations: [],
+          pending_import_batches: 0,
+          pending_webhook_receipts: 0,
+        }),
+      );
     if (path.startsWith('/api/products?'))
       return new Response(
         JSON.stringify({ items: [], total: 0, page: 1, page_size: 6, total_pages: 0 }),
@@ -73,6 +89,7 @@ describe('shell de e-commerce local', () => {
       await waitFor(() => expect(heading).toHaveFocus());
     }
     expect(fetchMock.mock.calls.map(([path]) => path).sort()).toEqual([
+      '/api/diagnostics',
       '/api/health',
       '/api/products?page=1&page_size=6',
       '/api/runtime',
@@ -93,7 +110,7 @@ describe('shell de e-commerce local', () => {
     expect(screen.getByRole('status', { name: 'Modo da cotação' })).toHaveTextContent(
       'Verificando modo',
     );
-    expect(screen.getByText('Verificando a API e o modo de cotação…')).toBeVisible();
+    expect(screen.getByText('Verificando a API, banco local e auditoria…')).toBeVisible();
     expect(screen.queryByText('Mock · cotação sintética')).not.toBeInTheDocument();
   });
 
@@ -111,7 +128,7 @@ describe('shell de e-commerce local', () => {
     expect(screen.queryByText('synthetic-private-secret')).not.toBeInTheDocument();
     successfulApi();
     await user.click(screen.getByRole('button', { name: 'Tentar novamente' }));
-    expect(await screen.findByRole('heading', { name: 'Aplicação local' })).toBeVisible();
+    expect(await screen.findByRole('heading', { name: 'Diagnóstico local' })).toBeVisible();
     expect(await screen.findByText('Mock · cotação sintética')).toBeVisible();
   });
 

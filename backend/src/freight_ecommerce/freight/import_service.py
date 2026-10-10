@@ -1,6 +1,7 @@
 import hashlib
 import json
 import math
+from time import perf_counter
 from uuid import UUID, uuid4
 
 from fastapi import HTTPException
@@ -28,6 +29,7 @@ from freight_ecommerce.freight.imports import (
     ImportTrackingRefreshView,
     ImportTrackingView,
 )
+from freight_ecommerce.freight.logging import bind_correlation_id
 
 
 def availability(client: PacksenviosClient) -> ImportAvailability:
@@ -107,15 +109,18 @@ def _audit(
     details: dict,
     batch: ShipmentImportBatch | None = None,
     http_status: int | None = None,
+    correlation_id: UUID | None = None,
+    latency_ms: int | None = None,
 ) -> None:
     session.add(
         IntegrationAudit(
-            correlation_id=uuid4(),
+            correlation_id=correlation_id or uuid4(),
             import_batch_id=batch.id if batch else None,
             operation=operation,
             mode=client.settings.mode,
             outcome=outcome,
             http_status=http_status,
+            latency_ms=latency_ms,
             details=details,
         )
     )
@@ -225,9 +230,15 @@ async def upload(
     if existing is not None:
         return _local_view(existing)
     session.commit()
+    correlation_id = uuid4()
+    started = perf_counter()
     try:
-        response = await client.upload_order_import(file.filename, file.content, file.content_type)
+        with bind_correlation_id(str(correlation_id)):
+            response = await client.upload_order_import(
+                file.filename, file.content, file.content_type
+            )
     except FreightError as error:
+        latency = max(0, int((perf_counter() - started) * 1000))
         _audit(
             session,
             client=client,
@@ -239,7 +250,13 @@ async def upload(
                 else "failed"
             ),
             http_status=error.http_status,
-            details={"file_sha256": file.content_sha256, "error_code": error.code},
+            correlation_id=correlation_id,
+            latency_ms=latency,
+            details={
+                "file_sha256": file.content_sha256,
+                "error_code": error.code,
+                "retry_after_seconds": error.retry_after_seconds,
+            },
         )
         session.commit()
         _raise_gateway_error(error)
@@ -261,6 +278,7 @@ async def upload(
     )
     batch.transition(ImportStatus.UPLOAD_PENDING)
     batch.external_status = response.status
+    latency = max(0, int((perf_counter() - started) * 1000))
     session.add(batch)
     try:
         with session.begin_nested():
@@ -271,6 +289,8 @@ async def upload(
                 operation="order_import_uploaded",
                 outcome="succeeded",
                 http_status=202,
+                correlation_id=correlation_id,
+                latency_ms=latency,
                 batch=batch,
                 details={
                     "file_sha256": file.content_sha256,
@@ -401,9 +421,26 @@ async def get_batch(
     errors_only: bool,
 ) -> ImportDetail:
     batch = _find_batch(session, client, batch_id)
+    correlation_id = uuid4()
+    started = perf_counter()
     try:
-        response = await client.get_order_import(batch_id, cursor=cursor, errors_only=errors_only)
+        with bind_correlation_id(str(correlation_id)):
+            response = await client.get_order_import(
+                batch_id, cursor=cursor, errors_only=errors_only
+            )
     except FreightError as error:
+        _audit(
+            session,
+            client=client,
+            operation="order_import_status_read",
+            outcome="uncertain" if error.http_status is None else "failed",
+            http_status=error.http_status,
+            correlation_id=correlation_id,
+            latency_ms=max(0, int((perf_counter() - started) * 1000)),
+            batch=batch,
+            details={"error_code": error.code, "cursor": cursor, "errors_only": errors_only},
+        )
+        session.commit()
         _raise_gateway_error(error)
     _sync_counts(batch, response)
     _store_dispatch_snapshot(batch, _dispatch_snapshot(response.dispatch))
@@ -413,6 +450,8 @@ async def get_batch(
         operation="order_import_status_read",
         outcome="succeeded",
         http_status=200,
+        correlation_id=correlation_id,
+        latency_ms=max(0, int((perf_counter() - started) * 1000)),
         batch=batch,
         details={"cursor": cursor, "errors_only": errors_only, "external_status": response.status},
     )
@@ -437,9 +476,24 @@ async def get_tracking(
     row_number: int,
 ) -> ImportTrackingView:
     batch = _find_batch(session, client, batch_id)
+    correlation_id = uuid4()
+    started = perf_counter()
     try:
-        snapshot = await client.get_order_import_tracking(batch_id, row_number)
+        with bind_correlation_id(str(correlation_id)):
+            snapshot = await client.get_order_import_tracking(batch_id, row_number)
     except FreightError as error:
+        _audit(
+            session,
+            client=client,
+            operation="order_import_tracking_snapshot",
+            outcome="uncertain" if error.http_status is None else "failed",
+            http_status=error.http_status,
+            correlation_id=correlation_id,
+            latency_ms=max(0, int((perf_counter() - started) * 1000)),
+            batch=batch,
+            details={"row_number": row_number, "source": "packsenvios", "error_code": error.code},
+        )
+        session.commit()
         _raise_gateway_error(error)
     captured_at = utcnow()
     _audit(
@@ -448,6 +502,8 @@ async def get_tracking(
         operation="order_import_tracking_snapshot",
         outcome="succeeded",
         http_status=200,
+        correlation_id=correlation_id,
+        latency_ms=max(0, int((perf_counter() - started) * 1000)),
         batch=batch,
         details={
             "row_number": row_number,
@@ -518,10 +574,13 @@ async def refresh_tracking(
         outcome="started",
         details={"row_number": row_number, "source": "packsenvios", "status": "request_started"},
     )
+    correlation_id = attempt.correlation_id
     session.add(attempt)
     session.commit()
+    started = perf_counter()
     try:
-        queued = await client.refresh_order_import_tracking(batch_id, row_number)
+        with bind_correlation_id(str(correlation_id)):
+            queued = await client.refresh_order_import_tracking(batch_id, row_number)
     except FreightError as error:
         attempt.outcome = (
             "uncertain"
@@ -530,15 +589,18 @@ async def refresh_tracking(
             else "failed"
         )
         attempt.http_status = error.http_status
+        attempt.latency_ms = max(0, int((perf_counter() - started) * 1000))
         attempt.details = {
             "row_number": row_number,
             "source": "packsenvios",
             "error_code": error.code,
+            "retry_after_seconds": error.retry_after_seconds,
         }
         session.commit()
         _raise_gateway_error(error)
     attempt.outcome = "started"
     attempt.http_status = 202
+    attempt.latency_ms = max(0, int((perf_counter() - started) * 1000))
     attempt.details = {
         "row_number": row_number,
         "source": "packsenvios",
@@ -582,6 +644,8 @@ async def dispatch_batch(
     batch_id: UUID,
 ) -> ImportDispatchView:
     batch = _find_batch(session, client, batch_id, lock=True)
+    correlation_id = uuid4()
+    preflight_started = perf_counter()
     connection_id = client.settings.dispatch_connection_id
     if connection_id is None:
         _audit(
@@ -590,6 +654,7 @@ async def dispatch_batch(
             operation="order_import_dispatch_blocked",
             outcome="failed",
             batch=batch,
+            correlation_id=correlation_id,
             details={"reason": "dispatch_connection_not_configured"},
         )
         session.commit()
@@ -601,8 +666,21 @@ async def dispatch_batch(
             },
         )
     try:
-        current = await client.get_order_import(batch_id, cursor=0, errors_only=False)
+        with bind_correlation_id(str(correlation_id)):
+            current = await client.get_order_import(batch_id, cursor=0, errors_only=False)
     except FreightError as error:
+        _audit(
+            session,
+            client=client,
+            operation="order_import_dispatch_preflight",
+            outcome="uncertain" if error.http_status is None else "failed",
+            http_status=error.http_status,
+            correlation_id=correlation_id,
+            latency_ms=max(0, int((perf_counter() - preflight_started) * 1000)),
+            batch=batch,
+            details={"error_code": error.code, "retry_after_seconds": error.retry_after_seconds},
+        )
+        session.commit()
         _raise_gateway_error(error)
     _sync_counts(batch, current)
     snapshot = _dispatch_snapshot(current.dispatch)
@@ -615,6 +693,8 @@ async def dispatch_batch(
             outcome="succeeded" if snapshot and snapshot.id else "uncertain",
             batch=batch,
             http_status=200,
+            correlation_id=correlation_id,
+            latency_ms=max(0, int((perf_counter() - preflight_started) * 1000)),
             details={
                 "dispatch_request_id": snapshot.id if snapshot else None,
                 "external_dispatch_status": snapshot.status if snapshot else None,
@@ -638,6 +718,8 @@ async def dispatch_batch(
             outcome="uncertain",
             batch=batch,
             http_status=200,
+            correlation_id=correlation_id,
+            latency_ms=max(0, int((perf_counter() - preflight_started) * 1000)),
             details={"source": "packsenvios", "dispatch_snapshot_found": False},
         )
         session.commit()
@@ -656,6 +738,8 @@ async def dispatch_batch(
             outcome="failed",
             batch=batch,
             http_status=200,
+            correlation_id=correlation_id,
+            latency_ms=max(0, int((perf_counter() - preflight_started) * 1000)),
             details={
                 "external_status": current.status,
                 "total": current.total,
@@ -675,7 +759,7 @@ async def dispatch_batch(
             },
         )
     attempt = IntegrationAudit(
-        correlation_id=uuid4(),
+        correlation_id=correlation_id,
         import_batch_id=batch.id,
         operation="order_import_dispatch",
         mode=client.settings.mode,
@@ -688,8 +772,10 @@ async def dispatch_batch(
     )
     session.add(attempt)
     session.commit()
+    dispatch_started = perf_counter()
     try:
-        result = await client.dispatch_order_import(batch_id, connection_id)
+        with bind_correlation_id(str(correlation_id)):
+            result = await client.dispatch_order_import(batch_id, connection_id)
     except FreightError as error:
         attempt.outcome = (
             "uncertain"
@@ -698,10 +784,12 @@ async def dispatch_batch(
             else "failed"
         )
         attempt.http_status = error.http_status
+        attempt.latency_ms = max(0, int((perf_counter() - dispatch_started) * 1000))
         attempt.details = {
             **attempt.details,
             "error_code": error.code,
             "external_status": None,
+            "retry_after_seconds": error.retry_after_seconds,
         }
         if attempt.outcome == "uncertain" and batch.status == ImportStatus.IMPORTED:
             batch.transition(ImportStatus.DISPATCH_PENDING)
@@ -716,6 +804,7 @@ async def dispatch_batch(
         batch.transition(ImportStatus.DISPATCH_PENDING)
     attempt.outcome = "uncertain" if result.uncertain > 0 else "started"
     attempt.http_status = 202
+    attempt.latency_ms = max(0, int((perf_counter() - dispatch_started) * 1000))
     attempt.details = {
         **result.model_dump(mode="json", by_alias=True, exclude_none=True),
         "source": "packsenvios",
@@ -731,27 +820,33 @@ async def confirm_batch(
     batch_id: UUID,
 ) -> ImportLocalBatch:
     batch = _find_batch(session, client, batch_id)
+    correlation_id = uuid4()
+    started = perf_counter()
     try:
-        current = await client.get_order_import(batch_id, cursor=0, errors_only=False)
-        _sync_counts(batch, current)
-        if current.status not in {"review", "confirming", "imported"} or current.valid < 1:
-            _audit(
-                session,
-                client=client,
-                operation="order_import_confirm_blocked",
-                outcome="failed",
-                batch=batch,
-                details={"external_status": current.status, "valid": current.valid},
-            )
-            session.commit()
-            raise HTTPException(
-                409,
-                detail={
-                    "code": "import_confirmation_not_ready",
-                    "message": "Lote ainda não está validado para confirmação.",
-                },
-            )
-        response = await client.confirm_order_import(batch_id)
+        with bind_correlation_id(str(correlation_id)):
+            current = await client.get_order_import(batch_id, cursor=0, errors_only=False)
+            _sync_counts(batch, current)
+            if current.status not in {"review", "confirming", "imported"} or current.valid < 1:
+                _audit(
+                    session,
+                    client=client,
+                    operation="order_import_confirm_blocked",
+                    outcome="failed",
+                    http_status=200,
+                    correlation_id=correlation_id,
+                    latency_ms=max(0, int((perf_counter() - started) * 1000)),
+                    batch=batch,
+                    details={"external_status": current.status, "valid": current.valid},
+                )
+                session.commit()
+                raise HTTPException(
+                    409,
+                    detail={
+                        "code": "import_confirmation_not_ready",
+                        "message": "Lote ainda não está validado para confirmação.",
+                    },
+                )
+            response = await client.confirm_order_import(batch_id)
     except FreightError as error:
         _audit(
             session,
@@ -759,8 +854,10 @@ async def confirm_batch(
             operation="order_import_confirm",
             outcome="uncertain" if error.http_status is None else "failed",
             http_status=error.http_status,
+            correlation_id=correlation_id,
+            latency_ms=max(0, int((perf_counter() - started) * 1000)),
             batch=batch,
-            details={"error_code": error.code},
+            details={"error_code": error.code, "retry_after_seconds": error.retry_after_seconds},
         )
         session.commit()
         _raise_gateway_error(error)
@@ -771,6 +868,8 @@ async def confirm_batch(
         operation="order_import_confirm",
         outcome="succeeded",
         http_status=202,
+        correlation_id=correlation_id,
+        latency_ms=max(0, int((perf_counter() - started) * 1000)),
         batch=batch,
         details={"external_status": response.status, "operator_confirmed": True},
     )

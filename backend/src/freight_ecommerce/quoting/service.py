@@ -20,6 +20,7 @@ from freight_ecommerce.domain.models import (
 from freight_ecommerce.domain.states import CartStatus, QuoteStatus
 from freight_ecommerce.freight.client import PacksenviosClient
 from freight_ecommerce.freight.errors import FreightError
+from freight_ecommerce.freight.logging import bind_correlation_id
 from freight_ecommerce.freight.schemas import PreparedQuote, QuoteEnvelope, QuoteRequest
 from freight_ecommerce.quoting.packing import derive_request
 from freight_ecommerce.quoting.schemas import PublicOption, QuoteCommand, QuoteView, SelectOption
@@ -317,7 +318,11 @@ def complete(
                 request_key=quote.request_key,
                 http_status=error.http_status if error else 200,
                 latency_ms=elapsed_ms,
-                details={"code": error.code if error else "received", "current": current},
+                details={
+                    "code": error.code if error else "received",
+                    "current": current,
+                    "retry_after_seconds": error.retry_after_seconds if error else None,
+                },
             )
         )
         session.flush()
@@ -342,7 +347,8 @@ async def quote_cart(
     error = None
     started = perf_counter()
     try:
-        response = await client.create_quote(dispatch.prepared)
+        with bind_correlation_id(str(dispatch.token)):
+            response = await client.create_quote(dispatch.prepared)
         if response.data.status not in {"quoted", "unavailable", "fiscal_review"}:
             error = FreightError(
                 "unexpected_quote_state",

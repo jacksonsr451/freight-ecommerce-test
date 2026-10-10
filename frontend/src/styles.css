@@ -541,6 +541,7 @@ h1 {
 }
 .diagnostic-toolbar {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   gap: 18px;
   align-items: center;
@@ -550,6 +551,47 @@ h1 {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 24px;
+}
+.diagnostic-check pre,
+.diagnostic-operations pre {
+  max-width: 100%;
+  overflow: auto;
+  padding: 12px;
+  border-radius: 8px;
+  background: #f1f2ed;
+  font-size: 11px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.diagnostic-summary {
+  margin-top: 22px;
+}
+.diagnostic-operations {
+  margin-top: 22px;
+}
+.diagnostic-operations ol {
+  display: grid;
+  gap: 14px;
+  padding-left: 22px;
+}
+.diagnostic-operations li {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow-wrap: anywhere;
+}
+.diagnostic-operation-heading {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px;
+}
+.diagnostic-operation-heading .status-pill {
+  margin: 0;
+}
+.diagnostic-operations details {
+  margin-top: 12px;
 }
 .status-pill {
   display: inline-block;

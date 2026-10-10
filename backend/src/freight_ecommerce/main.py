@@ -13,6 +13,7 @@ from freight_ecommerce.cart.router import router as cart_router
 from freight_ecommerce.catalog import router
 from freight_ecommerce.config import Settings
 from freight_ecommerce.database import build_engine
+from freight_ecommerce.diagnostics import router as diagnostics_router
 from freight_ecommerce.freight.client import PacksenviosClient
 from freight_ecommerce.freight.config import FreightSettings
 from freight_ecommerce.freight.import_router import router as imports_router
@@ -101,6 +102,7 @@ def create_app(
     app.include_router(imports_router)
     app.include_router(webhooks_router)
     app.include_router(admin_webhooks_router)
+    app.include_router(diagnostics_router)
 
     @app.get("/api/health", response_model=HealthResponse, tags=["health"])
     def health() -> HealthResponse:
