@@ -43,6 +43,15 @@ async def test_admin_is_restricted_even_without_running_database(environment, ke
             ("GET", "/api/admin/imports/export-readiness"),
             ("GET", "/api/admin/imports"),
             ("GET", "/api/admin/imports/00000000-0000-4000-8000-000000000001"),
+            ("POST", "/api/admin/imports/00000000-0000-4000-8000-000000000001/dispatch"),
+            (
+                "GET",
+                "/api/admin/imports/00000000-0000-4000-8000-000000000001/rows/3/tracking",
+            ),
+            (
+                "POST",
+                "/api/admin/imports/00000000-0000-4000-8000-000000000001/rows/3/tracking",
+            ),
         ]:
             response = await client.request(method, path, headers=headers)
             assert response.status_code == status
@@ -69,6 +78,15 @@ async def test_internal_openapi_documents_only_local_admin_key_not_external_secr
         assert schema["paths"]["/api/admin/imports/{batch_id}/confirm"]["post"]["security"] == [
             {"LocalAdminKey": []}
         ]
+        assert schema["paths"]["/api/admin/imports/{batch_id}/dispatch"]["post"]["security"] == [
+            {"LocalAdminKey": []}
+        ]
+        assert schema["paths"]["/api/admin/imports/{batch_id}/rows/{row}/tracking"]["get"][
+            "security"
+        ] == [{"LocalAdminKey": []}]
+        assert schema["paths"]["/api/admin/imports/{batch_id}/rows/{row}/tracking"]["post"][
+            "security"
+        ] == [{"LocalAdminKey": []}]
         assert (
             schema["components"]["securitySchemes"]["LocalAdminKey"]["name"] == "X-Local-Admin-Key"
         )

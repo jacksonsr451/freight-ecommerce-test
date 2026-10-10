@@ -16,7 +16,13 @@ from freight_ecommerce.freight.errors import (
     FreightError,
     parse_retry_after,
 )
-from freight_ecommerce.freight.imports import ImportBatchPage, ImportSummary
+from freight_ecommerce.freight.imports import (
+    DispatchResult,
+    ImportBatchPage,
+    ImportSummary,
+    TrackingRefreshQueued,
+    TrackingSnapshot,
+)
 from freight_ecommerce.freight.logging import protect_transport_logs, transport_logging_scope
 from freight_ecommerce.freight.schemas import PreparedQuote, QuoteEnvelope, QuoteRequest
 from freight_ecommerce.freight.synthetic import (
@@ -150,6 +156,40 @@ class PacksenviosClient:
             params=self._import_context(),
             json={"confirm_valid_rows": True},
             response_model=ImportSummary,
+        )
+
+    async def dispatch_order_import(self, batch_id: UUID, connection_id: UUID) -> DispatchResult:
+        self._require_real_import()
+        return await self._send_import(
+            "POST",
+            f"/api/v1/freight/order-imports/{UUID(str(batch_id))}/dispatch",
+            expected_status=202,
+            params=self._import_context(),
+            json={"connection_id": str(UUID(str(connection_id))), "confirm_dispatch": True},
+            response_model=DispatchResult,
+        )
+
+    async def get_order_import_tracking(self, batch_id: UUID, row_number: int) -> TrackingSnapshot:
+        self._require_real_import()
+        params = self._import_context()
+        return await self._send_import(
+            "GET",
+            f"/api/v1/freight/order-imports/{UUID(str(batch_id))}/rows/{row_number}/tracking",
+            expected_status=200,
+            params=params,
+            response_model=TrackingSnapshot,
+        )
+
+    async def refresh_order_import_tracking(
+        self, batch_id: UUID, row_number: int
+    ) -> TrackingRefreshQueued:
+        self._require_real_import()
+        return await self._send_import(
+            "POST",
+            f"/api/v1/freight/order-imports/{UUID(str(batch_id))}/rows/{row_number}/tracking",
+            expected_status=202,
+            params=self._import_context(),
+            response_model=TrackingRefreshQueued,
         )
 
     async def _send_import(

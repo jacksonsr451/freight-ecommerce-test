@@ -1,31 +1,39 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Path, Query, Response, UploadFile
 
 from freight_ecommerce.catalog.router import SessionDep, errors, require_local_admin
 from freight_ecommerce.freight.client import PacksenviosClient
 from freight_ecommerce.freight.import_service import (
     availability,
     confirm_batch,
+    dispatch_batch,
     export_readiness,
     get_batch,
+    get_tracking,
     list_batches,
+    refresh_tracking,
     upload,
 )
 from freight_ecommerce.freight.import_validation import ImportFileError, validate_import_file
 from freight_ecommerce.freight.imports import (
+    ConfirmDispatch,
     ConfirmImport,
     ExportReadiness,
     ImportAvailability,
     ImportDetail,
+    ImportDispatchView,
     ImportLocalBatch,
     ImportLocalPage,
+    ImportTrackingRefreshView,
+    ImportTrackingView,
 )
 from freight_ecommerce.quoting.router import get_client
 
 ClientDep = Annotated[PacksenviosClient, Depends(get_client)]
 Cursor = Annotated[int, Query(ge=0, le=1_048_576)]
+SpreadsheetRow = Annotated[int, Path(ge=3, le=1_048_576)]
 router = APIRouter(
     prefix="/api/admin/imports",
     tags=["local-admin-imports"],
@@ -107,3 +115,45 @@ async def confirm(
     result = await confirm_batch(session, client, batch_id)
     response.status_code = 202
     return result
+
+
+@router.post("/{batch_id}/dispatch", response_model=ImportDispatchView, status_code=202)
+async def dispatch(
+    batch_id: UUID,
+    data: ConfirmDispatch,
+    session: SessionDep,
+    client: ClientDep,
+):
+    if data.confirm_dispatch is not True or data.operator_confirmed is not True:
+        raise HTTPException(
+            422,
+            detail={
+                "code": "operator_dispatch_confirmation_required",
+                "message": "A revisão e confirmação explícita do despacho são obrigatórias.",
+            },
+        )
+    return await dispatch_batch(session, client, batch_id)
+
+
+@router.get("/{batch_id}/rows/{row}/tracking", response_model=ImportTrackingView)
+async def tracking_snapshot(
+    batch_id: UUID,
+    row: SpreadsheetRow,
+    session: SessionDep,
+    client: ClientDep,
+    response: Response,
+):
+    response.headers["Cache-Control"] = "private, no-store"
+    return await get_tracking(session, client, batch_id, row)
+
+
+@router.post(
+    "/{batch_id}/rows/{row}/tracking", response_model=ImportTrackingRefreshView, status_code=202
+)
+async def tracking_refresh(
+    batch_id: UUID,
+    row: SpreadsheetRow,
+    session: SessionDep,
+    client: ClientDep,
+):
+    return await refresh_tracking(session, client, batch_id, row)

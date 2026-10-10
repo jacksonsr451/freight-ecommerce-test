@@ -1533,6 +1533,31 @@ dd {
   display: block;
   margin: 4px 0;
 }
+.import-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.tracking-snapshot,
+.import-activity {
+  margin-top: 14px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: #f8f8f3;
+}
+.tracking-snapshot pre,
+.import-activity pre {
+  max-width: 100%;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 11px;
+}
+.import-activity details {
+  margin: 10px 0;
+  overflow-wrap: anywhere;
+}
 .import-rows pre {
   max-width: 100%;
   overflow: auto;

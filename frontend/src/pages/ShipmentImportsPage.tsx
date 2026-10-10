@@ -3,10 +3,13 @@ import { useState } from 'react';
 import { ApiError } from '../api/http';
 import {
   confirmImportBatch,
+  dispatchImportBatch,
   getImportAvailability,
   getImportBatch,
   getImportExportReadiness,
+  getImportTracking,
   listImportBatches,
+  refreshImportTracking,
   uploadImportFile,
 } from '../api/imports';
 import { Button, EmptyState, PageHeading } from '../components/ui';
@@ -34,6 +37,8 @@ export default function ShipmentImportsPage() {
   const [operatorReviewed, setOperatorReviewed] = useState(false);
   const [expectedPageCursors, setExpectedPageCursors] = useState<number[]>([0]);
   const [reviewedPageCursors, setReviewedPageCursors] = useState<number[]>([]);
+  const [trackingRow, setTrackingRow] = useState<number | null>(null);
+  const [dispatchReviewed, setDispatchReviewed] = useState(false);
   const queryClient = useQueryClient();
   const enabled = key.trim().length >= 32;
   const availability = useQuery({
@@ -60,6 +65,12 @@ export default function ShipmentImportsPage() {
     retry: false,
     queryFn: ({ signal }) => getImportBatch(key.trim(), selectedBatch, cursor, errorsOnly, signal),
   });
+  const tracking = useQuery({
+    queryKey: ['import-tracking', authSession, selectedBatch, trackingRow],
+    enabled: enabled && Boolean(selectedBatch) && trackingRow !== null,
+    retry: false,
+    queryFn: ({ signal }) => getImportTracking(key.trim(), selectedBatch, trackingRow!, signal),
+  });
   const upload = useMutation({
     retry: false,
     mutationFn: (file: File) => uploadImportFile(key.trim(), file),
@@ -84,6 +95,26 @@ export default function ShipmentImportsPage() {
       ]);
     },
   });
+  const dispatch = useMutation({
+    retry: false,
+    mutationFn: () => dispatchImportBatch(key.trim(), selectedBatch),
+    onSuccess: async () => {
+      setDispatchReviewed(false);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['import-batch', authSession, selectedBatch] }),
+        queryClient.invalidateQueries({ queryKey: ['import-batches', authSession] }),
+      ]);
+    },
+  });
+  const refreshTracking = useMutation({
+    retry: false,
+    mutationFn: (rowNumber: number) => refreshImportTracking(key.trim(), selectedBatch, rowNumber),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: ['import-batch', authSession, selectedBatch],
+      });
+    },
+  });
   const canReview = Boolean(
     detail.data &&
     ['review', 'confirming', 'imported'].includes(detail.data.external_status) &&
@@ -97,6 +128,17 @@ export default function ShipmentImportsPage() {
     expectedPageCursors.every(
       (page) => reviewedPageCursors.includes(page) || (page === cursor && operatorReviewed),
     ),
+  );
+  const canDispatch = Boolean(
+    detail.data &&
+    availability.data?.dispatch_connection_configured &&
+    detail.data.external_status === 'imported' &&
+    detail.data.batch.total > 0 &&
+    detail.data.batch.imported === detail.data.batch.total &&
+    detail.data.batch.invalid === 0 &&
+    detail.data.batch.processed >= detail.data.batch.total &&
+    !detail.data.dispatch_retry_blocked &&
+    detail.data.dispatch === null,
   );
   const markPageReviewed = (reviewed: boolean) => {
     setOperatorReviewed(reviewed);
@@ -128,6 +170,8 @@ export default function ShipmentImportsPage() {
             setAuthSession((session) => session + 1);
             setSelectedBatch('');
             setOperatorReviewed(false);
+            setDispatchReviewed(false);
+            setTrackingRow(null);
             setExpectedPageCursors([0]);
             setReviewedPageCursors([]);
           }}
@@ -221,6 +265,8 @@ export default function ShipmentImportsPage() {
                   setCursor(0);
                   setErrorsOnly(false);
                   setOperatorReviewed(false);
+                  setDispatchReviewed(false);
+                  setTrackingRow(null);
                   setExpectedPageCursors([0]);
                   setReviewedPageCursors([]);
                 }}
@@ -233,6 +279,7 @@ export default function ShipmentImportsPage() {
                 <span>
                   {batch.valid} válidas · {batch.invalid} rejeitadas · {batch.imported} importadas
                 </span>
+                <span>Despacho externo: {batch.dispatch_status ?? 'sem solicitação'}</span>
               </button>
             ))}
           </section>
@@ -253,6 +300,8 @@ export default function ShipmentImportsPage() {
                     <dd>{detail.data.batch.local_status}</dd>
                     <dt>Estado externo</dt>
                     <dd>{detail.data.external_status}</dd>
+                    <dt>Despacho externo</dt>
+                    <dd>{detail.data.batch.dispatch_status ?? 'sem solicitação externa'}</dd>
                     <dt>Linhas válidas</dt>
                     <dd>{detail.data.batch.valid}</dd>
                     <dt>Linhas rejeitadas</dt>
@@ -304,6 +353,43 @@ export default function ShipmentImportsPage() {
                           Envio externo: {display(row.shipmentId)} · {display(row.dispatchStatus)}
                         </span>
                         <pre>{JSON.stringify(row.errors ?? [], null, 2)}</pre>
+                        <div className="import-row-actions">
+                          <Button
+                            className="button-secondary"
+                            onClick={() => setTrackingRow(Number(row.row))}
+                          >
+                            Consultar snapshot real · linha {display(row.row)}
+                          </Button>
+                          <Button
+                            className="button-secondary"
+                            disabled={refreshTracking.isPending}
+                            onClick={() => refreshTracking.mutate(Number(row.row))}
+                          >
+                            {refreshTracking.isPending
+                              ? 'Solicitando…'
+                              : `Solicitar atualização · linha ${display(row.row)}`}
+                          </Button>
+                        </div>
+                        {trackingRow === Number(row.row) && (
+                          <section
+                            className="tracking-snapshot"
+                            aria-label={`Snapshot real da linha ${display(row.row)}`}
+                          >
+                            <strong>Snapshot Packsenvios · linha {display(row.row)}</strong>
+                            {tracking.isPending && <p role="status">Consultando snapshot…</p>}
+                            {tracking.isError && <p role="alert">{message(tracking.error)}</p>}
+                            {tracking.data && (
+                              <>
+                                <p>
+                                  Capturado em{' '}
+                                  {new Date(tracking.data.captured_at).toLocaleString('pt-BR')}.
+                                  Etiquetas são dados de snapshot; não há download nesta tela.
+                                </p>
+                                <pre>{JSON.stringify(tracking.data.snapshot, null, 2)}</pre>
+                              </>
+                            )}
+                          </section>
+                        )}
                       </article>
                     ))}
                     {detail.data.items.length === 0 && <p>Nenhuma linha nesta página/filtro.</p>}
@@ -357,6 +443,72 @@ export default function ShipmentImportsPage() {
                       para ver processamento.
                     </p>
                   )}
+                  {refreshTracking.isSuccess && (
+                    <p role="status">
+                      Atualização solicitada; status {refreshTracking.data.status}. O snapshot atual
+                      não foi substituído até nova consulta.
+                    </p>
+                  )}
+                  {refreshTracking.isError && <p role="alert">{message(refreshTracking.error)}</p>}
+                  {!availability.data?.dispatch_connection_configured && (
+                    <p className="notice">
+                      Despacho indisponível: configure no backend uma conexão empresarial existente,
+                      ativa, testada e homologada.
+                    </p>
+                  )}
+                  {detail.data.dispatch_retry_blocked && (
+                    <p className="notice">
+                      Já existe uma solicitação de despacho ou resultado incerto. Não haverá novo
+                      POST; consulte/reconcilie pelo fluxo autorizado existente.
+                    </p>
+                  )}
+                  {canDispatch && (
+                    <div className="import-confirm-panel">
+                      <label>
+                        <input
+                          type="checkbox"
+                          checked={dispatchReviewed}
+                          onChange={(event) => setDispatchReviewed(event.target.checked)}
+                        />
+                        Confirmei que o lote está totalmente importado e solicito despacho nesta
+                        conexão configurada.
+                      </label>
+                      <Button
+                        disabled={!dispatchReviewed || dispatch.isPending}
+                        onClick={() => dispatch.mutate()}
+                      >
+                        {dispatch.isPending
+                          ? 'Solicitando despacho…'
+                          : 'Solicitar despacho externo'}
+                      </Button>
+                      <p>
+                        HTTP 202 significa enfileirado, não aceite da transportadora nem envio
+                        concluído.
+                      </p>
+                    </div>
+                  )}
+                  {dispatch.isError && <p role="alert">{message(dispatch.error)}</p>}
+                  {dispatch.isSuccess && (
+                    <p role="status">
+                      Solicitação {display(dispatch.data.dispatch?.status ?? 'registrada')} ·
+                      enfileirados {dispatch.data.dispatch?.enqueued ?? '—'} · aceitos{' '}
+                      {dispatch.data.dispatch?.accepted ?? '—'} · rejeitados{' '}
+                      {dispatch.data.dispatch?.rejected ?? '—'} · incertos{' '}
+                      {dispatch.data.dispatch?.uncertain ?? '—'}. Aceite não representa entrega.
+                    </p>
+                  )}
+                  <section className="import-activity">
+                    <h3>Auditoria e snapshots externos</h3>
+                    {detail.data.activity.map((event) => (
+                      <details key={event.id}>
+                        <summary>
+                          {new Date(event.occurred_at).toLocaleString('pt-BR')} · {event.operation}{' '}
+                          · {event.outcome}
+                        </summary>
+                        <pre>{JSON.stringify(event.details, null, 2)}</pre>
+                      </details>
+                    ))}
+                  </section>
                 </>
               )}
             </section>

@@ -25,6 +25,7 @@ ADMIN_HEADERS = {"X-Local-Admin-Key": ADMIN_KEY}
 COMPANY = UUID("00000000-0000-4000-8000-000000000002")
 LOCATION = UUID("00000000-0000-4000-8000-000000000003")
 BATCH = UUID("00000000-0000-4000-8000-000000000004")
+DISPATCH_CONNECTION = UUID("00000000-0000-4000-8000-000000000005")
 
 
 @pytest.fixture
@@ -108,7 +109,13 @@ def external_summary(status="queued", *, batch_id=BATCH):
 @pytest.fixture
 async def real_shop(db_engine):
     requests: list[httpx.Request] = []
-    remote_status = {"value": "review"}
+    remote_status = {
+        "value": "review",
+        "complete": False,
+        "dispatch": None,
+        "uncertain_dispatch": False,
+        "tracking_refresh_requests": [],
+    }
 
     async def handler(request: httpx.Request):
         requests.append(request)
@@ -117,22 +124,26 @@ async def real_shop(db_engine):
             return httpx.Response(202, json=external_summary("queued"))
         if request.method == "GET" and path == f"/api/v1/freight/order-imports/{BATCH}":
             status = remote_status["value"]
+            complete = remote_status["complete"]
             payload = {
                 **external_summary(status),
-                "valid": 1,
-                "invalid": 1,
-                "total": 2,
+                "valid": 1 if complete else 1,
+                "invalid": 0 if complete else 1,
+                "total": 1 if complete else 2,
+                "imported": 1 if complete else 0,
+                "processed": 1 if complete else 0,
+                "dispatch": remote_status["dispatch"],
                 "items": [
                     {
-                        "row": 3,
-                        "status": "invalid",
+                        "row": 37,
+                        "status": "synthetic_imported" if complete else "invalid",
                         "invoiceNumber": "123",
                         "recipientName": "Destinatário sintético",
                         "destination": "01001000",
                         "volumes": 1,
                         "weightKg": "1.500",
                         "errors": ["synthetic_validation_issue"],
-                        "shipmentId": None,
+                        "shipmentId": "synthetic-shipment-id" if complete else None,
                         "publicCode": None,
                         "dispatchStatus": None,
                     }
@@ -144,6 +155,46 @@ async def real_shop(db_engine):
         if request.method == "POST" and path == f"/api/v1/freight/order-imports/{BATCH}/confirm":
             remote_status["value"] = "confirming"
             return httpx.Response(202, json=external_summary("confirming"))
+        if request.method == "POST" and path == f"/api/v1/freight/order-imports/{BATCH}/dispatch":
+            body = request.content
+            assert str(DISPATCH_CONNECTION).encode() in body
+            assert b'"confirm_dispatch":true' in body
+            uncertain = 1 if remote_status["uncertain_dispatch"] else 0
+            result = {
+                "id": "synthetic-dispatch-request-001",
+                "batchId": str(BATCH),
+                "connectionId": str(DISPATCH_CONNECTION),
+                "status": "queued",
+                "total": 1,
+                "enqueued": 1,
+                "accepted": 0,
+                "rejected": 0,
+                "uncertain": uncertain,
+                "issue": None,
+            }
+            if not remote_status["uncertain_dispatch"]:
+                remote_status["dispatch"] = result
+            return httpx.Response(202, json=result)
+        if request.method == "GET" and path.endswith("/rows/37/tracking"):
+            return httpx.Response(
+                200,
+                json={
+                    "code": "synthetic-public-code",
+                    "reference": "synthetic-reference",
+                    "acceptedAt": "2026-10-10T12:00:00+00:00",
+                    "updatedAt": "2026-10-10T13:00:00+00:00",
+                    "issue": None,
+                    "labels": [],
+                    "labelsAt": None,
+                    "events": [
+                        {"synthetic_fixture_order": 2, "event": "later"},
+                        {"synthetic_fixture_order": 1, "event": "earlier"},
+                    ],
+                },
+            )
+        if request.method == "POST" and "/rows/37/tracking" in path:
+            remote_status["tracking_refresh_requests"].append(request)
+            return httpx.Response(202, json={"status": "queued"})
         return httpx.Response(404, json={"message": "synthetic not found"})
 
     settings = FreightSettings(
@@ -153,6 +204,7 @@ async def real_shop(db_engine):
         api_key="synthetic-import-bearer-token-only-for-mock-transport",
         company_id=COMPANY,
         location_id=LOCATION,
+        dispatch_connection_id=DISPATCH_CONNECTION,
         integration_scope="synthetic-import-tests",
         max_attempts=3,
     )
@@ -169,7 +221,7 @@ async def real_shop(db_engine):
 
 
 async def test_upload_batch_persists_deduplicates_reads_errors_and_explicitly_confirms(real_shop):
-    http, db, requests, _, _ = real_shop
+    http, db, requests, remote_status, _ = real_shop
     file = synthetic_csv()
     first = await http.post(
         "/api/admin/imports",
@@ -379,5 +431,222 @@ async def test_external_ability_denial_is_normalized_and_not_retried(db_engine):
         assert "synthetic private response" not in denied.text
         assert token not in denied.text
         assert len(received) == 1
+    await http.aclose()
+    await client.aclose()
+
+
+async def test_dispatch_requires_existing_connection_and_complete_import(real_shop):
+    http, _, requests, remote_status, _ = real_shop
+    uploaded = await http.post(
+        "/api/admin/imports",
+        headers=ADMIN_HEADERS,
+        files={"file": ("official-orders.csv", synthetic_csv(), "text/csv")},
+    )
+    assert uploaded.status_code == 202
+    remote_status["value"] = "imported"
+    remote_status["complete"] = False
+    blocked = await http.post(
+        f"/api/admin/imports/{BATCH}/dispatch",
+        headers=ADMIN_HEADERS,
+        json={"confirm_dispatch": True, "operator_confirmed": True},
+    )
+    assert blocked.status_code == 409
+    assert blocked.json()["detail"]["code"] == "import_dispatch_not_ready"
+    assert not any(request.url.path.endswith("/dispatch") for request in requests)
+
+
+async def test_dispatch_202_stays_pending_and_existing_request_is_never_reposted(real_shop):
+    http, db, requests, remote_status, _ = real_shop
+    uploaded = await http.post(
+        "/api/admin/imports",
+        headers=ADMIN_HEADERS,
+        files={"file": ("official-orders.csv", synthetic_csv(), "text/csv")},
+    )
+    assert uploaded.status_code == 202
+    remote_status["value"] = "imported"
+    remote_status["complete"] = True
+    path = f"/api/admin/imports/{BATCH}/dispatch"
+    body = {"confirm_dispatch": True, "operator_confirmed": True}
+    first = await http.post(path, headers=ADMIN_HEADERS, json=body)
+    assert first.status_code == 202, first.text
+    result = first.json()
+    assert result["batch"]["local_status"] == "dispatch_pending"
+    assert result["batch"]["external_status"] == "imported"
+    assert result["batch"]["dispatch_status"] == "queued"
+    assert result["dispatch"]["enqueued"] == 1
+    assert result["dispatch"]["accepted"] == 0
+    assert result["dispatch_retry_blocked"] is True
+    assert result["reconciliation_required"] is False
+    dispatch_calls = [request for request in requests if request.url.path.endswith("/dispatch")]
+    assert len(dispatch_calls) == 1
+    assert dispatch_calls[0].url.params["freight_company_id"] == str(COMPANY)
+    assert dispatch_calls[0].url.params["freight_location_id"] == str(LOCATION)
+
+    reconciled = await http.post(path, headers=ADMIN_HEADERS, json=body)
+    assert reconciled.status_code == 202
+    assert reconciled.json()["dispatch"]["id"] == "synthetic-dispatch-request-001"
+    assert len([request for request in requests if request.url.path.endswith("/dispatch")]) == 1
+    with Session(db) as session:
+        batch = session.scalar(select(m.ShipmentImportBatch))
+        assert batch.status.value == "dispatch_pending"
+        assert batch.external_status == "imported"
+        assert batch.external_dispatch_request_id == "synthetic-dispatch-request-001"
+        assert batch.external_dispatch_status == "queued"
+
+
+async def test_uncertain_dispatch_is_reconciled_without_a_blind_retry(real_shop):
+    http, db, requests, remote_status, _ = real_shop
+    uploaded = await http.post(
+        "/api/admin/imports",
+        headers=ADMIN_HEADERS,
+        files={"file": ("official-orders.csv", synthetic_csv(), "text/csv")},
+    )
+    assert uploaded.status_code == 202
+    remote_status["value"] = "imported"
+    remote_status["complete"] = True
+    remote_status["uncertain_dispatch"] = True
+    path = f"/api/admin/imports/{BATCH}/dispatch"
+    body = {"confirm_dispatch": True, "operator_confirmed": True}
+    result = await http.post(path, headers=ADMIN_HEADERS, json=body)
+    assert result.status_code == 202
+    assert result.json()["dispatch"]["uncertain"] == 1
+    assert result.json()["reconciliation_required"] is True
+    replay = await http.post(path, headers=ADMIN_HEADERS, json=body)
+    assert replay.status_code == 202
+    assert replay.json()["dispatch_retry_blocked"] is True
+    assert replay.json()["reconciliation_required"] is True
+    assert len([request for request in requests if request.url.path.endswith("/dispatch")]) == 1
+    with Session(db) as session:
+        audit = session.scalar(
+            select(m.IntegrationAudit)
+            .where(m.IntegrationAudit.operation == "order_import_dispatch")
+            .order_by(m.IntegrationAudit.created_at.desc())
+        )
+        assert audit.outcome == "uncertain"
+
+
+async def test_tracking_uses_spreadsheet_row_keeps_real_snapshot_order_and_throttles_refresh(
+    real_shop,
+):
+    http, db, requests, remote_status, _ = real_shop
+    uploaded = await http.post(
+        "/api/admin/imports",
+        headers=ADMIN_HEADERS,
+        files={"file": ("official-orders.csv", synthetic_csv(), "text/csv")},
+    )
+    assert uploaded.status_code == 202
+    snapshot = await http.get(f"/api/admin/imports/{BATCH}/rows/37/tracking", headers=ADMIN_HEADERS)
+    assert snapshot.status_code == 200
+    assert snapshot.headers["cache-control"] == "private, no-store"
+    tracking = snapshot.json()
+    assert tracking["source"] == "packsenvios"
+    assert tracking["row_number"] == 37
+    assert tracking["snapshot"]["labels"] == []
+    assert [event["synthetic_fixture_order"] for event in tracking["snapshot"]["events"]] == [2, 1]
+    external_get = next(
+        request
+        for request in requests
+        if request.method == "GET" and "/tracking" in request.url.path
+    )
+    assert external_get.url.path.endswith(f"/order-imports/{BATCH}/rows/37/tracking")
+    assert external_get.url.params["freight_company_id"] == str(COMPANY)
+
+    queued = await http.post(f"/api/admin/imports/{BATCH}/rows/37/tracking", headers=ADMIN_HEADERS)
+    assert queued.status_code == 202
+    assert queued.json() == {
+        "batch_id": str(BATCH),
+        "row_number": 37,
+        "source": "packsenvios",
+        "status": "queued",
+    }
+    throttled = await http.post(
+        f"/api/admin/imports/{BATCH}/rows/37/tracking", headers=ADMIN_HEADERS
+    )
+    assert throttled.status_code == 429
+    assert 1 <= int(throttled.headers["Retry-After"]) <= 60
+    assert len(remote_status["tracking_refresh_requests"]) == 1
+    invalid_row = await http.get(
+        f"/api/admin/imports/{BATCH}/rows/2/tracking", headers=ADMIN_HEADERS
+    )
+    assert invalid_row.status_code == 422
+
+    detail = await http.get(f"/api/admin/imports/{BATCH}?cursor=0", headers=ADMIN_HEADERS)
+    assert detail.status_code == 200
+    tracking_activity = [
+        item
+        for item in detail.json()["activity"]
+        if item["operation"] == "order_import_tracking_snapshot"
+    ]
+    assert tracking_activity[-1]["details"]["source"] == "packsenvios"
+    assert [
+        event["synthetic_fixture_order"]
+        for event in tracking_activity[-1]["details"]["snapshot"]["events"]
+    ] == [2, 1]
+    with Session(db) as session:
+        assert (
+            session.scalar(
+                select(func.count())
+                .select_from(m.IntegrationAudit)
+                .where(m.IntegrationAudit.operation == "order_import_tracking_refresh")
+            )
+            == 1
+        )
+
+
+async def test_missing_dispatch_connection_blocks_without_posting(db_engine):
+    requests = []
+
+    async def handler(request: httpx.Request):
+        requests.append(request)
+        if request.method == "POST" and request.url.path.endswith("/order-imports"):
+            return httpx.Response(202, json=external_summary("queued"))
+        if request.method == "GET" and request.url.path.endswith(f"/order-imports/{BATCH}"):
+            return httpx.Response(
+                200,
+                json={
+                    **external_summary("imported"),
+                    "total": 1,
+                    "processed": 1,
+                    "imported": 1,
+                    "invalid": 0,
+                    "dispatch": None,
+                    "items": [],
+                    "hasMore": False,
+                    "nextCursor": None,
+                },
+            )
+        return httpx.Response(404)
+
+    client = PacksenviosClient(
+        FreightSettings(
+            _env_file=None,
+            mode="real",
+            base_url="https://freight.synthetic.invalid",
+            api_key="synthetic-import-bearer-token-only-for-mock-transport",
+            company_id=COMPANY,
+            integration_scope="synthetic-no-dispatch-connection",
+        ),
+        transport=httpx.MockTransport(handler),
+    )
+    app = create_app(
+        Settings(_env_file=None, environment="test", LOCAL_ADMIN_KEY=ADMIN_KEY),
+        engine=db_engine,
+        freight_client=client,
+    )
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://shop.test") as http:
+        uploaded = await http.post(
+            "/api/admin/imports",
+            headers=ADMIN_HEADERS,
+            files={"file": ("official-orders.csv", synthetic_csv(), "text/csv")},
+        )
+        assert uploaded.status_code == 202
+        denied = await http.post(
+            f"/api/admin/imports/{BATCH}/dispatch",
+            headers=ADMIN_HEADERS,
+            json={"confirm_dispatch": True, "operator_confirmed": True},
+        )
+        assert denied.status_code == 409
+        assert denied.json()["detail"]["code"] == "dispatch_connection_not_configured"
+        assert not any(request.url.path.endswith("/dispatch") for request in requests)
     await http.aclose()
     await client.aclose()

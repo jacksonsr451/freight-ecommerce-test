@@ -57,6 +57,60 @@ class ImportBatchPage(BaseModel):
         return value
 
 
+class DispatchResult(BaseModel):
+    """Fields documented for the 202 dispatch response; unknown status values stay open."""
+
+    model_config = ConfigDict(extra="allow")
+
+    id: str = Field(min_length=1, max_length=160)
+    batchId: UUID
+    connectionId: UUID
+    status: str = Field(min_length=1, max_length=80)
+    total: int = Field(ge=0)
+    enqueued: int = Field(ge=0)
+    accepted: int = Field(ge=0)
+    rejected: int = Field(ge=0)
+    uncertain: int = Field(ge=0)
+    issue: JsonValue = None
+
+
+class DispatchSnapshot(BaseModel):
+    """Partial dispatch projection for reconciliation; never use it to infer delivery."""
+
+    model_config = ConfigDict(extra="allow")
+
+    id: str | None = Field(default=None, max_length=160)
+    batchId: UUID | None = None
+    connectionId: UUID | None = None
+    status: str | None = Field(default=None, max_length=80)
+    total: int | None = Field(default=None, ge=0)
+    enqueued: int | None = Field(default=None, ge=0)
+    accepted: int | None = Field(default=None, ge=0)
+    rejected: int | None = Field(default=None, ge=0)
+    uncertain: int | None = Field(default=None, ge=0)
+    issue: JsonValue = None
+
+
+class TrackingSnapshot(BaseModel):
+    """Documented top-level snapshot fields; event and label payloads remain opaque JSON."""
+
+    model_config = ConfigDict(extra="allow")
+
+    code: JsonValue = None
+    reference: JsonValue = None
+    acceptedAt: JsonValue = None
+    updatedAt: JsonValue = None
+    issue: JsonValue = None
+    labels: JsonValue = None
+    labelsAt: JsonValue = None
+    events: JsonValue = None
+
+
+class TrackingRefreshQueued(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    status: Literal["queued"]
+
+
 class ImportLocalBatch(BaseModel):
     id: UUID
     filename: str
@@ -69,11 +123,22 @@ class ImportLocalBatch(BaseModel):
     duplicates: int
     processed: int
     created_at: datetime
+    dispatch_request_id: str | None = None
+    dispatch_status: str | None = None
 
 
 class ImportLocalPage(BaseModel):
     items: list[ImportLocalBatch]
     total: int
+
+
+class ImportActivityEvent(BaseModel):
+    id: UUID
+    occurred_at: datetime
+    operation: str
+    outcome: str
+    http_status: int | None
+    details: dict
 
 
 class ImportDetail(BaseModel):
@@ -84,6 +149,37 @@ class ImportDetail(BaseModel):
     items: list[dict[str, Any]]
     has_more: bool
     next_cursor: int | None
+    dispatch_retry_blocked: bool = False
+    activity: list[ImportActivityEvent] = Field(default_factory=list)
+
+
+class ImportDispatchView(BaseModel):
+    batch: ImportLocalBatch
+    dispatch: DispatchSnapshot | None
+    dispatch_retry_blocked: bool
+    reconciliation_required: bool
+
+
+class ImportTrackingView(BaseModel):
+    batch_id: UUID
+    row_number: int
+    source: Literal["packsenvios"]
+    snapshot: TrackingSnapshot
+    captured_at: datetime
+    refresh_queued: bool = False
+
+
+class ImportTrackingRefreshView(BaseModel):
+    batch_id: UUID
+    row_number: int
+    source: Literal["packsenvios"]
+    status: Literal["queued"]
+
+
+class ConfirmDispatch(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    confirm_dispatch: bool = Field(strict=True)
+    operator_confirmed: bool = Field(strict=True)
 
 
 class ImportAvailability(BaseModel):
@@ -91,6 +187,7 @@ class ImportAvailability(BaseModel):
     upload_enabled: bool
     company_configured: bool
     location_configured: bool
+    dispatch_connection_configured: bool
 
 
 class ExportReadiness(BaseModel):

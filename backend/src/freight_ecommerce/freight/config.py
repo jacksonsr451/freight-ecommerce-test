@@ -25,6 +25,7 @@ class FreightSettings(BaseSettings):
     api_key: SecretStr = Field(default="", repr=False)
     company_id: UUID | None = None
     location_id: UUID | None = None
+    dispatch_connection_id: UUID | None = None
     origin_postal_code: PostalCode | None = None
     timeout_seconds: float = Field(default=10, gt=0, le=120)
     connect_timeout_seconds: float = Field(default=3, gt=0, le=30)
