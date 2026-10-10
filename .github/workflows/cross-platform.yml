@@ -44,10 +44,12 @@ jobs:
         run: node frontend/node_modules/playwright/cli.js install chromium --with-deps
       - name: Validate the project
         run: python scripts/dev.py check
+      - name: Smoke local API and Vite proxy
+        run: python scripts/dev.py smoke
       - name: Validate responsive layout
         run: python scripts/dev.py layout
-      - name: Validate Compose runtime
-        run: python scripts/dev.py compose-smoke
+      - name: Validate Compose configuration
+        run: python scripts/dev.py compose-check
 
   windows:
     runs-on: windows-2022
@@ -86,7 +88,9 @@ jobs:
         run: python scripts/dev.py setup
       - name: Validate the project
         run: python scripts/dev.py check
+      - name: Smoke local API and Vite proxy
+        run: python scripts/dev.py smoke
       - name: Validate responsive layout
         run: python scripts/dev.py layout
-      - name: Validate Compose runtime
-        run: python scripts/dev.py compose-smoke
+      - name: Validate Compose configuration
+        run: python scripts/dev.py compose-check

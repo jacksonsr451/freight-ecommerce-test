@@ -8,21 +8,22 @@ As credenciais reais permanecem fora do relatório.
 | Gate | Windows 10/11 | Linux | Evidência / decisão |
 |---|---|---|---|
 | Root/manifests identificados | PASS | PASS (inspeção) | Poetry apenas em `backend/`; npm apenas em `frontend/`; root pelo script relativo ao próprio arquivo |
-| Python cross-platform CLI / wrapper | PENDING | PENDING | Repetir `python scripts/dev.py doctor`, `scripts/dev.ps1` no Windows e `bash scripts/dev.sh` no Linux após executar os wrappers |
-| Setup e validação `.env` | PENDING | PENDING | `python scripts/dev.py setup` e `env-check`; `.env` só é copiado quando ausente |
-| Backend, PostgreSQL, migrations/seed | PASS (suíte local já executada em Windows) | PENDING | Suíte cria/removе schemas efêmeros; executar CI Linux para registrar a matriz final |
-| Frontend/typecheck/lint/build | PASS (suíte local já executada em Windows) | PENDING | npm Node 24/npm 11; runner Linux ainda não executado neste workspace |
-| Playwright jornada local | PASS (Edge/Windows) | PENDING | Chromium Linux configurado no CI; precisa do resultado do runner Linux |
-| Docker Compose config | PASS | PASS (config inspecurada no runner WSL) | Não implica build/startup |
-| Docker Compose build/up/health/down | PENDING | PENDING | Executar `python scripts/dev.py compose-smoke` em ambos os runners; cleanup usa projeto/volume temporário próprios |
+| Python cross-platform CLI / wrapper | PASS (`dev.py`, PowerShell wrapper) | PASS (`dev.py`, Bash wrapper/doctor) | `doctor` detectou ferramentas e daemon conforme cada sistema |
+| Setup e validação `.env` | PASS | PENDING | Windows executou `setup` + `env-check`; Linux setup aguarda Poetry/Node Linux |
+| Backend, PostgreSQL, migrations/seed | PASS | PENDING | Windows `check`: 280 testes; Linux Poetry/Python host checks ainda não executados |
+| Frontend/typecheck/lint/build | PASS | PENDING | Windows `check`: 54 testes e build; Linux Node host não instalado |
+| Playwright jornada local | PASS (Edge/Windows, layout 5/5) | PENDING | Chromium Linux configurado no CI; runner Linux ainda não executado |
+| Docker Compose config | PASS | PASS | `compose-check`/`config --quiet` passou em Windows e WSL2 |
+| Docker Compose build/up/health/down | PASS | PASS (WSL2) | `up`/healthchecks Windows e projetos efêmeros `compose-smoke` passaram em Windows e WSL2; smoke remove recursos próprios |
 | HTTP Packsenvios, jobs, despacho, webhook externo | SKIP | SKIP | Nenhuma credencial/entrega/homologação real foi exercitada |
 | Exportação do modelo oficial | NO-GO | NO-GO | TODO-IMPORT-TEMPLATE: obter instrução linha 1 e 28 cabeçalhos oficiais exatos; export fica desabilitado |
 | Receiver de webhook homologado | NO-GO | NO-GO | Timestamp header sem unidade no guia; confirmar formato e destino público HTTPS/443 antes de configurar |
 
 ## Decisão de entrega
 
-- **GO para demonstração local/mock** quando `setup`, `check`, `smoke`, layout e Compose startup
-  passarem no sistema alvo. Compra/pagamento/pedido permanecem locais e simulados.
+- **GO para demonstração local/mock em Windows**: setup, check (280 backend + 54 frontend), smoke,
+  layout e Compose startup passaram. **GO para Compose Linux via WSL2**: build, healthchecks e proxy
+  passaram; suíte Linux de host permanece pendente. Compra/pagamento/pedido permanecem simulados.
 - **NO-GO para homologação externa** até concluir pré-requisitos de `docs/homologacao.md`, repetir
   testes reais autorizados e separar evidência de API, filas, aceite e entrega.
 - Não remover `manual_only`, limites de confirmação/importação, bloqueios de retry incerto ou redaction

@@ -23,7 +23,7 @@ python scripts/dev.py env-check
 
 `setup` copia `.env.example` para `.env` somente se `.env` ainda não existir, faz `poetry sync` em
 `backend/` e `npm ci` em `frontend/`. Edite somente `.env` local; nunca use valores reais em `VITE_*`.
-Wrapper equivalente: `scripts/dev.ps1 setup` (delega à mesma implementação Python).
+Wrapper equivalente: `powershell -File scripts/dev.ps1 setup` (delega à mesma implementação Python).
 
 Para executar no host, use terminais separados na raiz:
 
