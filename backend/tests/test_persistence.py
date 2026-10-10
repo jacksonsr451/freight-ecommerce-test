@@ -45,6 +45,8 @@ def test_all_entities_roundtrip_uuid_utc_snapshots_and_distinct_external_ids(ses
     assert graph.fulfillment.imported_shipment_id == ids["native_imported_shipment"]
     assert graph.order.created_at.utcoffset() == timedelta(0)
     assert graph.tracking.occurred_at == datetime(2026, 10, 8, 12, tzinfo=UTC)
+    assert graph.webhook.reconciliation_status == "reconciliation_pending"
+    assert graph.webhook.payload["synthetic_fixture"] is True
 
 
 @pytest.mark.parametrize(

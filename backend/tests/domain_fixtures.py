@@ -149,6 +149,26 @@ def make_graph(session):
         request_key=quote.request_key,
         details={"synthetic_fixture": True},
     )
-    session.add_all([tracking, audit])
+    webhook = m.WebhookReceipt(
+        event_id=f"synthetic-webhook-{uuid4()}",
+        delivery_id="synthetic-webhook-delivery",
+        event_type="shipment.tracking_updated",
+        occurred_at=datetime(2026, 10, 8, 12, tzinfo=UTC),
+        company_id=uuid4(),
+        location_id=uuid4(),
+        shipment_id=str(uuid4()),
+        public_code="SYNTHETIC-WEBHOOK-CODE",
+        dispatch_status="synthetic-pending",
+        body_sha256="b" * 64,
+        out_of_order=False,
+        reconciliation_status="reconciliation_pending",
+        worker_status="not_configured",
+        payload={
+            "synthetic_fixture": True,
+            "version": 1,
+            "type": "shipment.tracking_updated",
+        },
+    )
+    session.add_all([tracking, audit, webhook])
     session.commit()
     return SimpleNamespace(**locals())

@@ -17,7 +17,8 @@ homologação exige destino público HTTPS/443 autorizado.
 
 ## Verificação e recepção durável
 
-1. O endpoint lê `await request.body()` uma vez e assina/verifica esses bytes sem reserializar JSON.
+1. O endpoint lê o stream HTTP uma vez, preserva os bytes recebidos e assina/verifica esses bytes sem
+   reserializar JSON. O limite de 1 MiB é uma proteção local do receptor, não limite do provedor.
 2. Exige `X-Packsenvios-Timestamp` e `X-Packsenvios-Signature`; valida `v1=` + HMAC-SHA256 hexadecimal
    de `timestamp + '.' + body`, com `hmac.compare_digest`. A janela local recomendada é ±300 segundos.
 3. Só depois da assinatura valida o envelope versionado e os tipos/eventos descritos na referência.

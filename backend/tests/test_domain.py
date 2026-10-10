@@ -98,12 +98,12 @@ def test_postgres_offline_migrations_generate_upgrade_and_downgrade(alembic_conf
     config.output_buffer = upgrade
     command.upgrade(config, "head", sql=True)
     sql = upgrade.getvalue()
-    assert sql.count("CREATE TABLE ") == 18  # 17 domain tables + Alembic version
+    assert sql.count("CREATE TABLE ") == 19  # 18 domain tables + Alembic version
     assert "JSONB" in sql and "UUID" in sql and "TIMESTAMP WITH TIME ZONE" in sql
     assert "CREATE TRIGGER" in sql
     downgrade = StringIO()
     config.output_buffer = downgrade
     command.downgrade(config, "0005:base", sql=True)
-    assert downgrade.getvalue().count("DROP TABLE ") == 17  # version table is retained by Alembic
+    assert downgrade.getvalue().count("DROP TABLE ") == 17  # downgrade path starts at revision 0005
     assert "DROP FUNCTION" in downgrade.getvalue()
     assert "DROP COLUMN delivery_address" in downgrade.getvalue()
