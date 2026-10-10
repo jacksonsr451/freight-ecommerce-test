@@ -39,12 +39,17 @@ const cartItemSchema = z.object({
   available_quantity: integer,
   problem: z.enum(['inactive_product', 'inventory_unavailable', 'insufficient_stock']).nullable(),
 });
-const cartSchema = z
+export const cartSchema = z
   .object({
     id: z.uuid(),
     status: z.enum(['active', 'checkout_pending', 'checked_out', 'abandoned']),
     revision: integer.min(1),
     delivery_address: z.record(z.string(), z.json()).nullable(),
+    buyer_details: z
+      .object({ name: z.string(), email: z.email() })
+      .nullable()
+      .optional()
+      .default(null),
     items: z.array(cartItemSchema),
     subtotal_cents: integer,
     total_weight_grams: integer,

@@ -14,7 +14,15 @@ from sqlalchemy.orm import Session
 
 from freight_ecommerce.catalog.seed import seed_demo_catalog
 from freight_ecommerce.database import transaction
-from freight_ecommerce.domain.models import CartItem, Inventory
+from freight_ecommerce.domain.models import (
+    Cart,
+    CartItem,
+    FreightOptionSnapshot,
+    FreightQuote,
+    Inventory,
+    Order,
+    PaymentSimulation,
+)
 
 ROOT = Path(__file__).resolve().parents[2]
 pytestmark = [pytest.mark.postgres, pytest.mark.browser]
@@ -123,7 +131,16 @@ def test_store_journey_in_real_browser_uses_real_api_and_postgres(db_engine, tmp
             assert result.returncode == 0, result.stdout + result.stderr
             assert "PASS" in result.stdout
             with Session(db_engine) as session:
-                assert session.scalar(select(func.count()).select_from(CartItem)) == 0
+                assert session.scalar(select(func.count()).select_from(CartItem)) == 1
+                cart = session.scalar(select(Cart))
+                assert cart.buyer_details["email"] == "buyer@example.com"
+                assert cart.delivery_address["postal_code"] == "01001000"
+                quote = session.scalar(select(FreightQuote))
+                assert quote is not None and quote.selected_option_snapshot_id is not None
+                option = session.get(FreightOptionSnapshot, quote.selected_option_snapshot_id)
+                assert option.manual_only is True and option.demonstration_only is True
+                assert session.scalar(select(func.count()).select_from(Order)) == 0
+                assert session.scalar(select(func.count()).select_from(PaymentSimulation)) == 0
                 assert all(stock.reserved == 0 for stock in session.scalars(select(Inventory)))
         finally:
             for process in reversed(processes):

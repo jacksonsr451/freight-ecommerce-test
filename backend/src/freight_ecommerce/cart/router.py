@@ -10,6 +10,7 @@ from freight_ecommerce.cart.schemas import (
     CartView,
     ChangeAddress,
     ChangeQuantity,
+    CheckoutDetails,
 )
 from freight_ecommerce.catalog.router import SessionDep, errors
 
@@ -51,3 +52,9 @@ def remove(
 @router.put("/{cart_id}/address", response_model=CartView)
 def address(cart_id: UUID, data: ChangeAddress, session: SessionDep):
     return service.change_address(session, cart_id, data)
+
+
+@router.put("/{cart_id}/checkout-details", response_model=CartView)
+def checkout_details(cart_id: UUID, data: CheckoutDetails, session: SessionDep):
+    """Local cart-bound buyer/address; not a customer identity claim or a freight payload."""
+    return service.save_checkout_details(session, cart_id, data)

@@ -4,17 +4,20 @@ export class ApiError extends Error {
   readonly code: 'http' | 'network' | 'invalid-response' | 'invalid-path';
   readonly status?: number;
   readonly domainCode?: string;
+  readonly retryAfterSeconds?: number;
   constructor(
     code: 'http' | 'network' | 'invalid-response' | 'invalid-path',
     message: string,
     status?: number,
     domainCode?: string,
+    retryAfterSeconds?: number,
   ) {
     super(message);
     this.name = 'ApiError';
     this.code = code;
     this.status = status;
     this.domainCode = domainCode;
+    this.retryAfterSeconds = retryAfterSeconds;
   }
 }
 
@@ -94,6 +97,20 @@ export async function requestInternal<T>(
       cart_item_not_found: 'O item não está mais neste carrinho.',
       item_quantity_limit: 'Limite de 1000 unidades por produto.',
       cart_item_limit: 'Limite de produtos distintos no carrinho atingido.',
+      unequal_volumes:
+        'Os volumes têm medidas diferentes. Use a estimativa por peso explicitamente ou revise os itens.',
+      freight_unauthorized: 'Cotação não autorizada. Verifique a credencial no backend.',
+      freight_forbidden: 'O backend não possui acesso autorizado para esta cotação.',
+      freight_validation_error:
+        'Os critérios foram recusados. Revise os dados do carrinho e endereço.',
+      freight_rate_limited: 'Limite de cotações atingido. Aguarde o tempo informado.',
+      freight_retry_wait: 'Aguarde antes de repetir a chamada de cotação.',
+      freight_unavailable: 'O serviço de cotação está temporariamente indisponível.',
+      freight_configuration_error: 'A configuração de frete do backend precisa ser revisada.',
+      quote_criteria_changed:
+        'Carrinho ou endereço mudaram. Recalcule o frete antes de selecionar.',
+      quote_not_selectable: 'A cotação não possui ofertas utilizáveis para seleção.',
+      estimate_not_selectable: 'Estimativa por peso não pode fechar pedido.',
     };
     try {
       const data: unknown = await response.json();
@@ -117,6 +134,18 @@ export async function requestInternal<T>(
       code ? known[code] : httpMessage(response.status),
       response.status,
       code,
+      (() => {
+        const value = response.headers.get('Retry-After');
+        if (!value) return undefined;
+        if (/^[0-9]+$/.test(value)) {
+          const seconds = Number(value);
+          return Number.isSafeInteger(seconds) ? seconds : undefined;
+        }
+        const time = Date.parse(value);
+        return Number.isFinite(time)
+          ? Math.max(0, Math.ceil((time - Date.now()) / 1000))
+          : undefined;
+      })(),
     );
   }
   try {

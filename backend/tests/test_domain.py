@@ -103,7 +103,7 @@ def test_postgres_offline_migrations_generate_upgrade_and_downgrade(alembic_conf
     assert "CREATE TRIGGER" in sql
     downgrade = StringIO()
     config.output_buffer = downgrade
-    command.downgrade(config, "0003:base", sql=True)
+    command.downgrade(config, "0004:base", sql=True)
     assert downgrade.getvalue().count("DROP TABLE ") == 16  # version table is retained by Alembic
     assert "DROP FUNCTION" in downgrade.getvalue()
     assert "DROP COLUMN delivery_address" in downgrade.getvalue()

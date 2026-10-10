@@ -1,5 +1,7 @@
 import { expect, test } from '@playwright/test';
 
+const CART_ID = '00000000-0000-4000-8000-000000000100';
+
 test.beforeEach(async ({ page }) => {
   await page.route('**/api/products?*', (route) =>
     route.fulfill({ json: { items: [], total: 0, page: 1, page_size: 6, total_pages: 0 } }),
@@ -10,6 +12,45 @@ test.beforeEach(async ({ page }) => {
   );
   await page.route('**/api/runtime', (route) =>
     route.fulfill({ json: { freight_mode: 'mock', purchases_simulated: true } }),
+  );
+  await page.addInitScript(
+    (cartId) => localStorage.setItem('freight-lab.cart-id', cartId),
+    CART_ID,
+  );
+  await page.route(`**/api/carts/${CART_ID}`, (route) =>
+    route.fulfill({
+      json: {
+        id: CART_ID,
+        status: 'active',
+        revision: 2,
+        delivery_address: null,
+        buyer_details: null,
+        items: [
+          {
+            id: '00000000-0000-4000-8000-000000000101',
+            product_id: '00000000-0000-4000-8000-000000000102',
+            sku: 'SYNTHETIC-E2E',
+            name: 'Produto sintético visual',
+            quantity: 1,
+            unit_price_cents: 2590,
+            line_total_cents: 2590,
+            weight_grams: 1000,
+            line_weight_grams: 1000,
+            length_cm: 20,
+            width_cm: 15,
+            height_cm: 10,
+            available_quantity: 5,
+            problem: null,
+          },
+        ],
+        subtotal_cents: 2590,
+        total_weight_grams: 1000,
+        total_quantity: 1,
+        editable: true,
+        checkout_ready: false,
+        has_current_quote: false,
+      },
+    }),
   );
 });
 
@@ -27,8 +68,20 @@ for (const width of [320, 390, 768, 1280]) {
       'Uma compra de teste. Tudo às claras.',
     );
     await expect(page.getByText('Mock · cotação sintética')).toBeVisible();
+    const overflow = await page.evaluate(() =>
+      [...document.querySelectorAll<HTMLElement>('*')]
+        .filter((element) => element.getBoundingClientRect().right > window.innerWidth + 1)
+        .map((element) => ({
+          tag: element.tagName,
+          className: String(element.className),
+          right: element.getBoundingClientRect().right,
+          width: element.getBoundingClientRect().width,
+          text: element.innerText.slice(0, 80),
+        })),
+    );
     expect(
       await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+      JSON.stringify(overflow),
     ).toBe(true);
     if (width < 600) {
       const toggle = page.getByRole('button', { name: 'Abrir menu' });
@@ -41,17 +94,26 @@ for (const width of [320, 390, 768, 1280]) {
     await page.getByRole('link', { name: 'Checkout', exact: true }).click();
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('Checkout de teste');
     await expect(page.getByRole('heading', { level: 1 })).toBeFocused();
+    const checkoutOverflow = await page.evaluate(() =>
+      [...document.querySelectorAll<HTMLElement>('*')]
+        .filter((element) => element.getBoundingClientRect().right > window.innerWidth + 1)
+        .map((element) => ({
+          tag: element.tagName,
+          className: String(element.className),
+          right: element.getBoundingClientRect().right,
+          width: element.getBoundingClientRect().width,
+          text: element.innerText.slice(0, 80),
+        })),
+    );
     expect(
       await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+      JSON.stringify(checkoutOverflow),
     ).toBe(true);
-    await page.getByLabel('CEP de destino').fill('123');
-    await page.getByRole('button', { name: 'Validar CEP' }).click();
-    await expect(page.getByRole('alert')).toContainText('8 dígitos');
-    await page.getByLabel('CEP de destino').fill('01001000');
-    await page.getByLabel('CEP de destino').press('Enter');
-    await expect(
-      page.getByText('CEP validado localmente. Nenhuma cotação foi enviada.'),
-    ).toBeVisible();
+    await expect(page.getByRole('textbox', { name: 'CEP de destino' })).toBeVisible();
+    await expect(page.getByRole('textbox', { name: 'Nome do comprador' })).toBeVisible();
+    await page.getByRole('button', { name: 'Salvar dados e cotar' }).click();
+    await expect(page.getByText('Informe o nome com ao menos 2 caracteres.')).toBeVisible();
+    await expect(page.getByRole('textbox', { name: 'Nome do comprador' })).toBeFocused();
     await page.screenshot({ path: testInfo.outputPath(`checkout-${width}.png`), fullPage: true });
     expect(external).toEqual([]);
   });

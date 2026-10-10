@@ -140,23 +140,12 @@ describe('shell de e-commerce local', () => {
     ).toBeVisible();
   });
 
-  it('valida formulário por teclado, associa erro e preserva zero inicial sem enviar cotação', async () => {
+  it('checkout sem carrinho pede produtos sem fabricar dados ou enviar cotação', async () => {
     const fetchMock = successfulApi();
-    const user = userEvent.setup();
     renderApp('/checkout');
-    const input = screen.getByRole('textbox', { name: 'CEP de destino' });
-    await user.click(input);
-    await user.type(input, '123{Enter}');
-    expect(screen.getByRole('alert')).toHaveTextContent('8 dígitos');
-    expect(input).toHaveAttribute('aria-invalid', 'true');
-    expect(input).toHaveFocus();
-    const errorId = screen.getByRole('alert').id;
-    expect(input.getAttribute('aria-describedby')).toContain(errorId);
-    await user.clear(input);
-    await user.type(input, '01001000{Enter}');
-    expect(input).toHaveValue('01001000');
-    expect(screen.getByText('CEP validado localmente. Nenhuma cotação foi enviada.')).toBeVisible();
-    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { name: 'Escolha produtos antes de comparar fretes' }),
+    ).toBeVisible();
     expect(
       fetchMock.mock.calls.every(
         ([path, options]) => String(path).startsWith('/api/') && options.method === 'GET',

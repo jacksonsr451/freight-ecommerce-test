@@ -264,9 +264,9 @@ com provedor/banco. O badge vem dessa resposta, não de variável pública ou va
 Enquanto carrega/falha, mostra modo pendente/indisponível. Real significa configuração backend,
 não homologação ou oferta comprovada. Pagamento/compra permanecem locais e simulados.
 
-O shell foi criado no prompt 08; catálogo/carrinho foram conectados no 09. Checkout completo fica
-no 10 e pedidos no 11. O CEP no checkout
-valida apenas formato localmente e não dispara cotação/pagamento. Diagnóstico usa apenas API local.
+O shell foi criado no prompt 08; catálogo/carrinho foram conectados no 09; o prompt 10 implementa
+comprador/endereço, cotação local-orquestrada e escolha por referência de snapshot. Pagamento/pedido
+simulados e pedidos permanecem para o 11. Diagnóstico usa apenas API local.
 
 ```powershell
 # Rodar lint, Vitest e build frontend (incluídos em Check):
@@ -307,6 +307,32 @@ próprio e seed sintético, verificando adicionar/alterar/remover, reload, subto
 reserva. Esse teste roda em `Check` quando PostgreSQL, Node/dependências frontend e Edge estão disponíveis.
 Em ambiente sem esses pré-requisitos, é SKIP explícito, não comprovação de browser.
 Decisões/evidências: `docs/architecture/frontend-store.md`.
+
+## Checkout e comparação de fretes (prompt 10)
+
+O checkout combina `PUT /api/carts/{id}/checkout-details` (comprador/endereço local),
+`POST /api/carts/{id}/freight-quotes` (orquestrador local do motor 07), GET da referência
+interna e POST `/selection` local. A UI não chama rotas Packsenvios; o backend adapter concentra
+o POST/GET externo documentado e mantém Bearer no servidor.
+
+- Nome/e-mail/endereço/UF validados; CEP é string de oito dígitos preservando zeros.
+- Cotação usa peso, medidas, valor, empresa/unidade e origem derivados/configurados no backend.
+- Opções múltiplas exibem preço em centavos formatado, prazo em dias e flags manuais/demonstração.
+  Identidade selecionada é UUID interno do snapshot; preço/IDs externos não são reenviados.
+- No modo `equal_volumes`, medidas divergentes exigem revisão/embalagem. `weight_only` é estimativa
+  explicitamente marcada, não selecionável para fechar pedido.
+- `unavailable` e `fiscal_review` mostram estados vazios separados, sem preço zero.
+- Mudar qualquer campo salvo do comprador/endereço altera a revisão e fingerprint do carrinho,
+  invalida opção/cotação anteriores e oculta seleção até nova cotação.
+- Comprar/pagar continua simulado e fora da ação de cotar/selecionar; nenhum pedido externo é criado.
+
+Detalhes de estado, limites do contrato e evidência: `docs/architecture/checkout-freight.md`.
+
+Checkout salva apenas comprador/endereço no carrinho local (sem identidade/documentos fiscais),
+obtém revisão do servidor e chama o orquestrador interno. Seleciona `option_reference` local;
+`request_key`, `data.id`, resposta JSON bruta e Bearer não são expostos. Flags desconhecidas exigem
+revisão. Alterar dados após cotar oculta ofertas imediatamente, invalida a tentativa no backend e
+uma nova cotação usa novo UUID. Resposta/local state não afirma contratação externa.
 
 ## Convenções e configuração
 

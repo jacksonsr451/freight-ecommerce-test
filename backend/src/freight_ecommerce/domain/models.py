@@ -107,6 +107,10 @@ class Cart(Stateful, MutableRecord, Base):
             "commercial_fingerprint IS NULL OR char_length(commercial_fingerprint) = 64",
             name="commercial_fingerprint_length",
         ),
+        CheckConstraint(
+            "buyer_details IS NULL OR jsonb_typeof(buyer_details) = 'object'",
+            name="buyer_details_object",
+        ),
     )
     initial_status = CartStatus.ACTIVE
     status: Mapped[CartStatus] = state_column(CartStatus, initial_status)
@@ -114,6 +118,7 @@ class Cart(Stateful, MutableRecord, Base):
     revision: Mapped[int] = mapped_column(default=1, server_default="1")
     delivery_address: Mapped[dict[str, Any] | None] = mapped_column(JSONB(none_as_null=True))
     commercial_fingerprint: Mapped[str | None] = mapped_column(String(64))
+    buyer_details: Mapped[dict[str, Any] | None] = mapped_column(JSONB(none_as_null=True))
 
 
 class CartItem(MutableRecord, Base):

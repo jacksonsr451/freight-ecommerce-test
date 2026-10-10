@@ -61,6 +61,7 @@ export function syntheticServer() {
 
   const cart = (): Cart => ({
     id: CART,
+    buyer_details: null,
     status: 'active',
     revision,
     delivery_address: null,

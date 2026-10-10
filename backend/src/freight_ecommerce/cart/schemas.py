@@ -1,7 +1,7 @@
 from typing import Annotated, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, StringConstraints
 
 from freight_ecommerce.catalog.schemas import Quantity
 
@@ -47,6 +47,19 @@ class ChangeAddress(BaseModel):
     address: DeliveryAddress | None  # explicit null clears the guest destination
 
 
+class BuyerDetails(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=2, max_length=160)]
+    email: Annotated[EmailStr, Field(max_length=254)]
+
+
+class CheckoutDetails(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    expected_revision: Revision
+    buyer: BuyerDetails
+    address: DeliveryAddress
+
+
 class CartItemView(BaseModel):
     id: UUID
     product_id: UUID
@@ -69,6 +82,7 @@ class CartView(BaseModel):
     status: Literal["active", "checkout_pending", "checked_out", "abandoned"]
     revision: int
     delivery_address: DeliveryAddress | None
+    buyer_details: BuyerDetails | None = None
     items: list[CartItemView]
     subtotal_cents: int
     total_weight_grams: int

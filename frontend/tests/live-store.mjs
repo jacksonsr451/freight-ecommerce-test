@@ -7,17 +7,16 @@ const browser = await chromium.launch({ channel: 'msedge', headless: true });
 try {
   const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
   const writes = [];
+  const checkoutWrites = [];
   const external = [];
-  page.on('requestfailed', (request) => {
-    console.error(
-      'Local request failed:',
-      new URL(request.url()).pathname,
-      request.failure()?.errorText,
-    );
-  });
   page.on('request', (request) => {
     const url = new URL(request.url());
     if (url.hostname !== '127.0.0.1') external.push(request.url());
+    if (url.pathname.endsWith('/checkout-details') && request.method() === 'PUT') {
+      const body = request.postDataJSON();
+      checkoutWrites.push(body);
+      assert.deepEqual(Object.keys(body).sort(), ['address', 'buyer', 'expected_revision']);
+    }
     if (url.pathname.includes('/items') && request.method() !== 'GET') {
       const body = request.postDataJSON();
       writes.push({ method: request.method(), body });
@@ -61,8 +60,46 @@ try {
     ['POST', 'PATCH', 'DELETE'],
   );
   assert.deepEqual(external, []);
+  await page.goto(`${process.env.LIVE_STORE_URL}/catalogo`);
+  await page.getByRole('link', { name: 'Livro sintético de demonstração', exact: true }).click();
+  await page.getByLabel('Quantidade', { exact: true }).fill('2');
+  await page.getByRole('button', { name: 'Adicionar ao carrinho' }).click();
+  await page.getByRole('link', { name: 'Ver carrinho', exact: true }).click();
+  await expect(page.getByRole('complementary', { name: 'Resumo do carrinho' })).toContainText(
+    '91,80',
+  );
+  await page.goto(`${process.env.LIVE_STORE_URL}/checkout`);
+  for (const [label, value] of [
+    ['Nome do comprador', 'Comprador sintético'],
+    ['E-mail', 'buyer@example.com'],
+    ['CEP de destino', '01001000'],
+    ['Rua', 'Rua sintética'],
+    ['Número', '1'],
+    ['Bairro', 'Centro'],
+    ['Cidade', 'São Paulo'],
+  ])
+    await page.getByLabel(label).fill(value);
+  await page.getByLabel('UF').selectOption('SP');
+  await page.getByRole('button', { name: 'Salvar dados e cotar' }).click();
+  await expect(page.getByText('Transportadora sintética')).toBeVisible();
+  const offeredOption = page.getByRole('button', { name: /Selecionar oferta 1/ });
+  await expect(offeredOption).toBeEnabled();
+  await offeredOption.click();
+  await expect(
+    page.getByText(
+      'Oferta selecionada somente na loja. Nenhuma contratação ou pagamento externo foi realizado.',
+    ),
+  ).toBeVisible();
+  await expect(page.getByRole('complementary', { name: 'Resumo do checkout' })).toContainText(
+    '25,90',
+  );
+  assert(checkoutWrites.some((body) => body.buyer.email === 'buyer@example.com'));
+  await page.screenshot({
+    path: process.env.LIVE_STORE_SCREENSHOT.replace('cart-live-mobile', 'checkout-live-mobile'),
+    fullPage: true,
+  });
   console.log(
-    'PASS: real browser -> local API -> PostgreSQL add/update/remove, authoritative totals and no reservation',
+    'PASS: real browser -> local API -> PostgreSQL catalog/cart/checkout/mock quote/local selection; no external calls',
   );
 } finally {
   await browser.close();

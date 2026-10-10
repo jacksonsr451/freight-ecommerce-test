@@ -11,6 +11,7 @@ from freight_ecommerce.cart.schemas import (
     CartView,
     ChangeAddress,
     ChangeQuantity,
+    CheckoutDetails,
 )
 from freight_ecommerce.catalog.service import fail, find_product
 from freight_ecommerce.domain.models import (
@@ -111,8 +112,11 @@ def fingerprint(cart: Cart, items: list[CartItemView]) -> str:
     # Changes in stock that still satisfy the quantity do not alter the quote criteria.
     for item in sorted(items, key=lambda item: str(item.product_id)):
         values.append(item.model_dump(mode="json", exclude={"id", "available_quantity"}))
+    context = {"items": values, "address": cart.delivery_address}
+    if cart.buyer_details is not None:
+        context["buyer"] = cart.buyer_details
     canonical = json.dumps(
-        {"items": values, "address": cart.delivery_address},
+        context,
         sort_keys=True,
         separators=(",", ":"),
         ensure_ascii=True,
@@ -216,6 +220,7 @@ def render(session: Session, cart: Cart, items: list[CartItemView], editable: bo
         status=cart.status,
         revision=cart.revision,
         delivery_address=cart.delivery_address,
+        buyer_details=cart.buyer_details,
         items=items,
         subtotal_cents=sum(item.line_total_cents for item in items),
         total_weight_grams=sum(item.line_weight_grams for item in items),
@@ -336,5 +341,15 @@ def change_address(session: Session, cart_id: UUID, data: ChangeAddress) -> Cart
     cart = prepare_change(session, cart_id, data.expected_revision)
     address = data.address.model_dump(mode="json", exclude_none=True) if data.address else None
     changed = cart.delivery_address != address
+    cart.delivery_address = address
+    return finish_change(session, cart, changed=changed)
+
+
+def save_checkout_details(session: Session, cart_id: UUID, data: CheckoutDetails) -> CartView:
+    cart = prepare_change(session, cart_id, data.expected_revision)
+    buyer = data.buyer.model_dump(mode="json")
+    address = data.address.model_dump(mode="json", exclude_none=True)
+    changed = cart.buyer_details != buyer or cart.delivery_address != address
+    cart.buyer_details = buyer
     cart.delivery_address = address
     return finish_change(session, cart, changed=changed)
