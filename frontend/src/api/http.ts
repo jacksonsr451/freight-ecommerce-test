@@ -62,6 +62,7 @@ export async function requestInternal<T>(
   options: RequestOptions = {},
 ): Promise<T> {
   const target = internalPath(path);
+  const isMultipart = typeof FormData !== 'undefined' && options.body instanceof FormData;
   let response: Response;
   try {
     response = await fetch(target, {
@@ -70,11 +71,15 @@ export async function requestInternal<T>(
       redirect: 'error',
       headers: {
         Accept: 'application/json',
-        ...(options.body === undefined ? {} : { 'Content-Type': 'application/json' }),
+        ...(options.body === undefined || isMultipart
+          ? {}
+          : { 'Content-Type': 'application/json' }),
         ...options.headers,
       },
       signal: options.signal,
-      ...(options.body === undefined ? {} : { body: JSON.stringify(options.body) }),
+      ...(options.body === undefined
+        ? {}
+        : { body: isMultipart ? (options.body as FormData) : JSON.stringify(options.body) }),
     });
   } catch (error) {
     if (

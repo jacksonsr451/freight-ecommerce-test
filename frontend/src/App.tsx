@@ -9,6 +9,7 @@ import OrderPage from './pages/OrderPage';
 import NotFoundPage from './pages/NotFoundPage';
 import ProductPage from './pages/ProductPage';
 import AdminOrdersPage from './pages/AdminOrdersPage';
+import ShipmentImportsPage from './pages/ShipmentImportsPage';
 
 export default function App() {
   return (
@@ -22,6 +23,7 @@ export default function App() {
         <Route path="pedidos" element={<OrdersPage />} />
         <Route path="pedidos/:orderId" element={<OrderPage />} />
         <Route path="admin/pedidos" element={<AdminOrdersPage />} />
+        <Route path="admin/importacao" element={<ShipmentImportsPage />} />
         <Route path="diagnostico" element={<DiagnosticsPage />} />
         <Route path="*" element={<NotFoundPage />} />
       </Route>

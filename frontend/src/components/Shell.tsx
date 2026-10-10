@@ -9,7 +9,8 @@ const navigation = [
   ['/carrinho', 'Carrinho'],
   ['/checkout', 'Checkout'],
   ['/pedidos', 'Pedidos'],
-  ['/admin', 'Administração'],
+  ['/admin/importacao', 'Importação'],
+  ['/admin/pedidos', 'Administração'],
   ['/diagnostico', 'Diagnóstico'],
 ] as const;
 

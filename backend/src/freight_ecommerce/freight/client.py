@@ -16,6 +16,7 @@ from freight_ecommerce.freight.errors import (
     FreightError,
     parse_retry_after,
 )
+from freight_ecommerce.freight.imports import ImportBatchPage, ImportSummary
 from freight_ecommerce.freight.logging import protect_transport_logs, transport_logging_scope
 from freight_ecommerce.freight.schemas import PreparedQuote, QuoteEnvelope, QuoteRequest
 from freight_ecommerce.freight.synthetic import (
@@ -89,6 +90,118 @@ class PacksenviosClient:
             sort_keys=True,
         )
         return f"{self.settings.mode}:{hashlib.sha256(value.encode()).hexdigest()}"
+
+    @property
+    def creator_reference(self) -> str:
+        """Opaque local reference to the configured bearer; never the key or external title."""
+        key = self.settings.api_key.get_secret_value()
+        return hashlib.sha256(key.encode()).hexdigest()
+
+    def _require_real_import(self) -> None:
+        if self.settings.mode != "real" or self.settings.company_id is None:
+            raise FreightError(
+                "import_real_mode_required",
+                "Importação exige modo real e empresa configurada no backend.",
+                http_status=409,
+            )
+
+    def _import_context(self) -> dict[str, str]:
+        context = {"freight_company_id": str(self.settings.company_id)}
+        if self.settings.location_id is not None:
+            context["freight_location_id"] = str(self.settings.location_id)
+        return context
+
+    async def upload_order_import(
+        self, filename: str, content: bytes, content_type: str
+    ) -> ImportSummary:
+        """One-shot multipart POST. No retries; identical content is deduplicated upstream."""
+        self._require_real_import()
+        return await self._send_import(
+            "POST",
+            "/api/v1/freight/order-imports",
+            expected_status=202,
+            data=self._import_context(),
+            files={"file": (filename, content, content_type)},
+            response_model=ImportSummary,
+        )
+
+    async def get_order_import(
+        self, batch_id: UUID, *, cursor: int = 0, errors_only: bool = False
+    ) -> ImportBatchPage:
+        self._require_real_import()
+        params = {**self._import_context(), "cursor": str(cursor)}
+        if errors_only:
+            params["errors_only"] = "1"
+        return await self._send_import(
+            "GET",
+            f"/api/v1/freight/order-imports/{UUID(str(batch_id))}",
+            expected_status=200,
+            params=params,
+            response_model=ImportBatchPage,
+        )
+
+    async def confirm_order_import(self, batch_id: UUID) -> ImportSummary:
+        """One-shot operator-authorized confirm; never retries a side-effecting POST."""
+        self._require_real_import()
+        return await self._send_import(
+            "POST",
+            f"/api/v1/freight/order-imports/{UUID(str(batch_id))}/confirm",
+            expected_status=202,
+            params=self._import_context(),
+            json={"confirm_valid_rows": True},
+            response_model=ImportSummary,
+        )
+
+    async def _send_import(
+        self,
+        method: str,
+        path: str,
+        *,
+        expected_status: int,
+        response_model,
+        params=None,
+        data=None,
+        files=None,
+        json=None,
+    ):
+        scope = transport_logging_scope.set(True)
+        try:
+            response = await self._http.request(
+                method,
+                self._base + path,
+                params=params,
+                data=data,
+                files=files,
+                json=json,
+            )
+        except httpx.TimeoutException:
+            raise FreightError(
+                "import_timeout",
+                "Importação sem confirmação de resposta; consulte o lote antes de repetir.",
+            ) from None
+        except httpx.RequestError:
+            raise FreightError(
+                "import_transport_error",
+                "Falha de comunicação na importação; consulte o lote antes de repetir.",
+            ) from None
+        finally:
+            transport_logging_scope.reset(scope)
+        if response.status_code != expected_status:
+            raise self._http_error(response)
+        try:
+            result = response_model.model_validate(response.json())
+        except (ValueError, TypeError):
+            raise FreightError(
+                "import_invalid_response",
+                "Resposta de importação fora do contrato documentado.",
+                http_status=response.status_code,
+            ) from None
+        logger.info(
+            "freight operation=order_import_%s outcome=success status=%d",
+            method.lower(),
+            response.status_code,
+        )
+        return result
 
     def prepare_quote(self, request: QuoteRequest) -> PreparedQuote:
         if request.freight_company_id is not None and request.freight_company_id != self._company:
