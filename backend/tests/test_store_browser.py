@@ -58,15 +58,48 @@ def wait_for(url, processes):
     raise RuntimeError("Local browser test server did not become ready")
 
 
+def browser_available(channel: str) -> bool:
+    if channel == "msedge":
+        if shutil.which("msedge") or shutil.which("msedge.exe"):
+            return True
+        for variable in ("PROGRAMFILES(X86)", "PROGRAMFILES"):
+            root = os.environ.get(variable)
+            if root and (Path(root) / "Microsoft/Edge/Application/msedge.exe").is_file():
+                return True
+        return False
+    if channel != "chromium":
+        return False
+    configured = os.environ.get("PLAYWRIGHT_BROWSERS_PATH")
+    if configured and configured != "0":
+        roots = [Path(configured)]
+    elif configured == "0":
+        roots = [ROOT / "frontend/node_modules/playwright-core/.local-browsers"]
+    elif os.name == "nt":
+        roots = [Path.home() / "AppData/Local/ms-playwright"]
+    else:
+        roots = [Path.home() / ".cache/ms-playwright"]
+    patterns = (
+        "chromium-*/chrome-linux/chrome",
+        "chromium-*/chrome-linux64/chrome",
+        "chromium-*/chrome-win/chrome.exe",
+    )
+    return any(any(root.glob(pattern)) for root in roots for pattern in patterns)
+
+
 def test_store_journey_in_real_browser_uses_real_api_and_postgres(db_engine, tmp_path):
     node = shutil.which("node")
-    edge = Path("C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe")
+    browser_channel = os.environ.get(
+        "PLAYWRIGHT_BROWSER_CHANNEL", "msedge" if os.name == "nt" else "chromium"
+    )
     if (
         not node
-        or not edge.is_file()
+        or not browser_available(browser_channel)
         or not (ROOT / "frontend/node_modules/@playwright/test").is_dir()
     ):
-        pytest.skip("Live store test requires Node, frontend dependencies and local Edge")
+        pytest.skip(
+            "Live store requires Node, frontend dependencies and installed browser channel "
+            f"{browser_channel}"
+        )
     with transaction(db_engine) as session:
         seed_demo_catalog(session)
     with db_engine.connect() as connection:
@@ -81,6 +114,7 @@ def test_store_journey_in_real_browser_uses_real_api_and_postgres(db_engine, tmp
         "TEST_STORE_SCHEMA": schema,
         "APP_ENVIRONMENT": "test",
         "LOCAL_ADMIN_KEY": "synthetic-local-admin-key-for-browser-tests-only",
+        "PLAYWRIGHT_BROWSER_CHANNEL": browser_channel,
         "FREIGHT_MODE": "mock",
         "FREIGHT_BASE_URL": "https://store.mock.invalid",
         "FREIGHT_API_KEY": "synthetic-test-key",

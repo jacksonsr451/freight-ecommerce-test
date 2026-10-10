@@ -15,6 +15,7 @@ class Settings(BaseSettings):
         env_file=ROOT / ".env",
         env_file_encoding="utf-8",
         env_prefix="APP_",
+        env_ignore_empty=True,
         extra="ignore",
         hide_input_in_errors=True,
     )

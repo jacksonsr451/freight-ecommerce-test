@@ -3,7 +3,12 @@ import { chromium, expect } from '@playwright/test';
 
 /* global document, window -- page.evaluate runs in the browser, not Node. */
 
-const browser = await chromium.launch({ channel: 'msedge', headless: true });
+const browser = await chromium.launch({
+  channel:
+    process.env.PLAYWRIGHT_BROWSER_CHANNEL ??
+    (process.platform === 'win32' ? 'msedge' : 'chromium'),
+  headless: true,
+});
 try {
   const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
   const writes = [];

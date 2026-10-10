@@ -1,43 +1,53 @@
 # freight-ecommerce-test
 
-**Raiz efetiva: `E:\Softwares\joao\tests`**. Backend, frontend, testes, documentação
-e infraestrutura ficam diretamente nesta raiz, sem diretório de projeto intermediário.
+**Raiz do repositório:** o diretório que contém este README, `docker-compose.yml`, `backend/` e
+`frontend/`. Backend, frontend, testes, documentação e infraestrutura ficam nesta raiz, sem diretório
+de projeto intermediário. Os comandos do projeto localizam a raiz a partir do script, não do cwd.
 
 Bootstrap local com **Poetry + FastAPI + Pydantic** e **React + TypeScript + Vite**.
 Inclui pytest, Ruff, ESLint, Prettier e Vitest; dependências exatas nos lockfiles.
-A tela inicial consulta apenas `/api/health` da API local. Compra, pagamento e pedido
-serão simulados; integração Packsenvios pertence a etapas posteriores.
+Inclui catálogo, checkout, pedidos/pagamentos simulados, painel administrativo, importação condicionada
+e diagnóstico seguro. A cotação pode usar o adapter real; o modo mock e as operações reais de despacho,
+tracking e webhook permanecem separados e explicitamente não homologados sem evidência externa.
 
-## Pré-requisitos e instalação
+## Compatibilidade operacional
+
+O ponto de entrada multiplataforma é `python scripts/dev.py <task>`. `scripts/dev.ps1` (PowerShell) e
+`scripts/dev.sh` (Bash) são wrappers finos para a mesma implementação. Veja os roteiros completos:
+
+- `docs/setup-windows.md`
+- `docs/setup-linux.md`
+- `docs/homologacao.md`
+- `docs/checklist-go-no-go.md`
+- `docs/architecture/compatibility-evidence-prompt18.md`
+
+## Pré-requisitos e instalação (Windows e Linux)
 
 - Python 3.11–3.14, Poetry 2.4+; Node 24.15+ na série 24 e npm 11.
-- Windows PowerShell 5.1+. A instalação baixa pacotes; testes locais não exigem serviços remotos.
-- Docker Desktop com engine Linux acessível somente para executar Compose.
+- Windows 10/11 com PowerShell 5.1+; Linux com Bash. Docker Compose v2 para execução em containers.
+- Mock é o modo de cotação padrão; testes locais não chamam Packsenvios.
 
-Na raiz atual:
+Na raiz do repositório, em PowerShell ou Bash:
 
-```powershell
-# Apenas na primeira configuração; não sobrescreva um .env existente.
-Copy-Item -LiteralPath ".env.example" -Destination ".env"
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\dev.ps1 Install
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\dev.ps1 Check
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\dev.ps1 Smoke
+```text
+python scripts/dev.py setup
+python scripts/dev.py env-check
+python scripts/dev.py check
+python scripts/dev.py smoke
 ```
 
-Saia de venvs de outros projetos antes de `Install`. Poetry cria `backend/.venv`.
-`Install` usa `poetry sync` e `npm ci`. `BackendCheck` usa Poetry/Ruff/pytest somente sob `backend/`;
-`FrontendCheck` usa npm scripts somente sob `frontend/`. `Check` executa ambos e valida a matriz.
-`Format` aplica formatters.
-`Smoke` inicia FastAPI/Vite em portas locais livres, verifica HTTP e proxy e encerra seus processos.
-`-ExecutionPolicy Bypass` vale apenas para o processo de PowerShell iniciado.
+`setup` cria `.env` somente se ele não existir, executa `poetry sync` em `backend/` e `npm ci` em
+`frontend/`. Poetry instala o backend; npm instala o frontend. `check` exige PostgreSQL de teste,
+executa as verificações completas e não trata testes persistentes SKIP como PASS. Detalhes específicos
+por sistema: `docs/setup-windows.md` e `docs/setup-linux.md`.
 
 ## Inicialização no host
 
-```powershell
-# Terminal 1, nesta raiz
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\dev.ps1 Backend
-# Terminal 2, nesta raiz
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\dev.ps1 Frontend
+```text
+# Terminal 1
+python scripts/dev.py backend
+# Terminal 2
+python scripts/dev.py frontend
 ```
 
 - Frontend: <http://127.0.0.1:5173>
@@ -47,12 +57,11 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\dev.ps1 Frontend
 
 ## Docker Compose
 
-```powershell
-docker compose config --quiet
-docker compose up --build -d --wait
+```text
+python scripts/dev.py compose-check
+python scripts/dev.py up
 docker compose ps
-# Para encerrar serviços preservando o volume do banco:
-docker compose down
+python scripts/dev.py down
 ```
 
 Compose é destinado ao desenvolvimento: PostgreSQL 17, FastAPI e Vite com healthchecks.
@@ -68,20 +77,19 @@ SQLAlchemy 2 + psycopg, UUIDs locais, centavos inteiros, `timestamptz` UTC e JSO
 `DATABASE_URL` é exclusiva do backend e aponta ao PostgreSQL **local**; no Compose usa host `db`.
 Os 16 modelos e transições estão em `backend/src/freight_ecommerce/domain/`.
 
-```powershell
+```text
 # Após iniciar PostgreSQL local e configurar DATABASE_URL em .env:
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\dev.ps1 Migrate
-# Conferir o estado (a partir desta raiz):
-poetry -C backend run alembic current
-poetry -C backend run alembic check
+python scripts/dev.py migrate
+python scripts/dev.py migration-current
+python scripts/dev.py migration-check
 ```
 
 Para testar persistência, escolha uma configuração de teste local:
 
-```powershell
-# Banco local acessível; testes só criam/removem schemas aleatórios freight_test_* próprios.
-$env:TEST_DATABASE_URL = 'postgresql+psycopg://freight_local:local_demo_only@127.0.0.1:5432/freight_local'
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\dev.ps1 PersistenceCheck
+```text
+# Defina TEST_DATABASE_URL no ambiente do seu shell; os testes só criam/removem
+# schemas aleatórios freight_test_* próprios. Veja setup-windows.md/setup-linux.md.
+python scripts/dev.py persistence-check
 ```
 
 Alternativamente, defina `TEST_POSTGRES_BIN` para a pasta que contém `initdb` e `pg_ctl`:
@@ -99,8 +107,8 @@ Decisões, invariantes, lacunas e evidências: `docs/architecture/domain-persist
 
 Depois de migrar o PostgreSQL **local**, carregue os produtos sintéticos:
 
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\dev.ps1 Seed
+```text
+python scripts/dev.py seed
 ```
 
 O seed cria sete produtos com preços/pesos/dimensões variados, incluindo esgotado e inativo.
@@ -269,15 +277,15 @@ O shell foi criado no prompt 08; catálogo/carrinho foram conectados no 09; o pr
 comprador/endereço, cotação local-orquestrada e escolha por referência de snapshot. Pagamento/pedido
 simulados e pedidos permanecem para o 11. Diagnóstico usa apenas API local.
 
-```powershell
-# Rodar lint, Vitest e build frontend (incluídos em Check):
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\dev.ps1 Check
+```text
+# Lint, Vitest, typecheck/build frontend (incluídos em Check):
+python scripts/dev.py frontend-check
 # Testes de layout em navegador real:
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\dev.ps1 LayoutCheck
+python scripts/dev.py layout
 ```
 
-LayoutCheck usa Playwright e Edge headless (`msedge`), disponível neste Windows. Em outra máquina
-com Chromium Playwright instalado, configure `PLAYWRIGHT_BROWSER_CHANNEL=chromium` antes de executar.
+`layout` usa Playwright headless; o canal é `msedge` no Windows e `chromium` no Linux/CI,
+selecionável por `PLAYWRIGHT_BROWSER_CHANNEL`.
 Screenshots/traces são gerados em `frontend/test-results/` e ignorados pelo Git.
 Evidências e decisões: `docs/architecture/frontend-shell.md`.
 
@@ -385,7 +393,9 @@ evidência local de idempotência/compensação inadvertidamente. Só em schema 
 ├── docs/reference/   # Documento original
 ├── docs/architecture/
 ├── infra/            # Dockerfiles e notas
-├── scripts/dev.ps1
+├── scripts/dev.py    # ponto de entrada multiplataforma
+├── scripts/dev.ps1   # wrapper PowerShell
+├── scripts/dev.sh    # wrapper Bash
 ├── .env.example
 ├── .gitignore
 └── docker-compose.yml
