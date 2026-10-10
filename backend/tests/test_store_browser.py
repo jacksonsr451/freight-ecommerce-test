@@ -17,12 +17,14 @@ from freight_ecommerce.database import transaction
 from freight_ecommerce.domain.models import (
     Cart,
     CartItem,
+    CheckoutAttempt,
     FreightOptionSnapshot,
     FreightQuote,
     Fulfillment,
     Inventory,
     Order,
     PaymentSimulation,
+    Product,
     StockReservation,
     TrackingEvent,
 )
@@ -78,6 +80,7 @@ def test_store_journey_in_real_browser_uses_real_api_and_postgres(db_engine, tmp
         "TEST_DATABASE_URL": db_engine.url.render_as_string(hide_password=False),
         "TEST_STORE_SCHEMA": schema,
         "APP_ENVIRONMENT": "test",
+        "LOCAL_ADMIN_KEY": "synthetic-local-admin-key-for-browser-tests-only",
         "FREIGHT_MODE": "mock",
         "FREIGHT_BASE_URL": "https://store.mock.invalid",
         "FREIGHT_API_KEY": "synthetic-test-key",
@@ -149,26 +152,37 @@ def test_store_journey_in_real_browser_uses_real_api_and_postgres(db_engine, tmp
                 option = session.get(FreightOptionSnapshot, quote.selected_option_snapshot_id)
                 assert option.manual_only is True and option.demonstration_only is True
                 order = session.scalar(select(Order))
-                assert order.status == OrderStatus.CANCELLED and order.simulation is True
+                assert order.status == OrderStatus.PAID_SIMULATED and order.simulation is True
                 payment = session.scalar(
                     select(PaymentSimulation).where(PaymentSimulation.order_id == order.id)
                 )
                 assert payment.status == PaymentStatus.APPROVED and payment.simulation is True
-                fulfillment = session.scalar(
-                    select(Fulfillment).where(Fulfillment.order_id == order.id)
+                orders = session.scalars(select(Order).order_by(Order.created_at, Order.id)).all()
+                assert len(orders) == 1
+                fulfilled_order = orders[0]
+                assert fulfilled_order.status == OrderStatus.PAID_SIMULATED
+                assert all(item.simulation is True for item in orders)
+                assert all(
+                    session.get(
+                        Cart, session.get(CheckoutAttempt, item.checkout_attempt_id).cart_id
+                    ).status
+                    == CartStatus.CHECKED_OUT
+                    for item in orders
                 )
-                assert fulfillment.status == FulfillmentStatus.CANCELLED
-                assert cart.status == CartStatus.CHECKED_OUT
-                reservation = session.scalar(
-                    select(StockReservation).where(StockReservation.order_id == order.id)
+                fulfilled_fulfillment = session.scalar(
+                    select(Fulfillment).where(Fulfillment.order_id == fulfilled_order.id)
                 )
-                assert (
-                    reservation is not None
-                    and not reservation.active
-                    and reservation.released_at is not None
+                assert fulfilled_fulfillment.status == FulfillmentStatus.DELIVERED_SIMULATED
+                reservations = session.scalars(
+                    select(StockReservation).order_by(StockReservation.order_id)
+                ).all()
+                assert len(reservations) == 1
+                assert reservations[0].active and reservations[0].quantity == 2
+                assert session.scalar(select(func.count()).select_from(TrackingEvent)) == 7
+                book_stock = session.scalar(
+                    select(Inventory).join(Product).where(Product.sku == "DEMO-BOOK")
                 )
-                assert session.scalar(select(func.count()).select_from(TrackingEvent)) == 2
-                assert all(stock.reserved == 0 for stock in session.scalars(select(Inventory)))
+                assert book_stock.reserved == 2
         finally:
             for process in reversed(processes):
                 process.terminate()

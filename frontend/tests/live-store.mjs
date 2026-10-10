@@ -77,7 +77,9 @@ try {
   await page.goto(`${process.env.LIVE_STORE_URL}/catalogo`);
   await page.getByRole('link', { name: 'Livro sintético de demonstração', exact: true }).click();
   await page.getByLabel('Quantidade', { exact: true }).fill('2');
-  await page.getByRole('button', { name: 'Adicionar ao carrinho' }).click();
+  const addSecondOrder = page.getByRole('button', { name: 'Adicionar ao carrinho' });
+  await expect(addSecondOrder).toBeEnabled();
+  await addSecondOrder.click();
   await page.getByRole('link', { name: 'Ver carrinho', exact: true }).click();
   await expect(page.getByRole('complementary', { name: 'Resumo do carrinho' })).toContainText(
     '91,80',
@@ -114,8 +116,21 @@ try {
   await page.getByRole('button', { name: 'Simular aprovado' }).click();
   await expect(page.getByText('Pagamento aprovado (simulação local)')).toBeVisible();
   await expect(page.getByText('pago simulado · evento de origem simulated')).toBeVisible();
-  await page.getByRole('button', { name: /Cancelar pedido local/ }).click();
-  await expect(page.getByText('Pedido cancelado (simulação local)')).toBeVisible();
+  const orderId = page.url().split('/').at(-1);
+  assert.match(orderId, /^[0-9a-f-]{36}$/i);
+  await page.goto(`${process.env.LIVE_STORE_URL}/admin/pedidos`);
+  await page.getByLabel('Chave administrativa local').fill(process.env.LOCAL_ADMIN_KEY);
+  await page.getByRole('button', { name: new RegExp(`Pedido · ${orderId.slice(0, 8)}`) }).click();
+  await page.getByRole('button', { name: 'Separando' }).click();
+  await page.getByRole('button', { name: 'Embalado' }).click();
+  await page.getByRole('button', { name: 'Pronto para importação' }).click();
+  await page.getByRole('button', { name: 'Importação pendente (local)' }).click();
+  await page.getByRole('button', { name: 'Expedido (simulação local)' }).click();
+  await page.getByRole('button', { name: 'Entregue (simulação local)' }).click();
+  await expect(page.getByText('Sem status externo vinculado')).toBeVisible();
+  await page.goto(`${process.env.LIVE_STORE_URL}/pedidos/${orderId}`);
+  await expect(page.getByText('entregue simulado · evento de origem simulated')).toBeVisible();
+  await expect(page.getByText(/Este estado é simulado/)).toBeVisible();
   await page.getByRole('link', { name: 'Ver histórico local' }).click();
   await expect(page.getByRole('link', { name: /Pedido local/ })).toBeVisible();
   assert(checkoutWrites.some((body) => body.buyer.email === 'buyer@example.com'));
@@ -124,7 +139,7 @@ try {
     fullPage: true,
   });
   console.log(
-    'PASS: real browser -> local API -> PostgreSQL catalog/cart/checkout/mock quote/local selection; no external calls',
+    'PASS: real browser -> local API -> PostgreSQL catalog/cart/checkout/mock quote/simulated payment/order/fulfillment/tracking; no external calls',
   );
 } finally {
   await browser.close();
