@@ -109,7 +109,7 @@ Todos foram corrigidos e nova rodada passou. Não foi suprimida a regra TS/lint 
 - Páginas comerciais são base visual, não consulta real do catálogo/carrinho/pedidos. O diagnóstico
   lê somente API local. Formulário CEP é somente validação local, como sinalizado na tela.
 - Testes browser interceptam runtime/health com fixtures sintéticas; o contrato/backend/proxy foram
-  verificados separadamente por pytest e smoke local. Isso não comprova homologação externa.
+  verificados separadamente por jsr-testrunner e smoke local. Isso não comprova homologação externa.
 - Backend modo Real é configuração, não conectividade real. Badge representa última leitura/cache
   Query (30 s) e pode ser atualizado no diagnóstico; falha não vira Mock automaticamente.
 - Nenhum runtime/build Docker foi executado nesta etapa. Persistência da regressão foi testada

@@ -1,6 +1,6 @@
 from uuid import uuid4
 
-import pytest
+import testrunner
 from fastapi import HTTPException
 
 from freight_ecommerce.cart.schemas import CartItemView
@@ -53,14 +53,14 @@ def test_equal_geometry_different_individual_weights_are_not_rounded_or_guessed(
     assert all(volume.length_cm == 23 for volume in request.volumes)
 
 
-@pytest.mark.parametrize("postal", ["01001-000", "1001000", 1001000, "invalid"])
+@testrunner.mark.parametrize("postal", ["01001-000", "1001000", 1001000, "invalid"])
 def test_engine_requires_canonical_destination_and_preserves_leading_zero(postal):
-    with pytest.raises(HTTPException) as error:
+    with testrunner.raises(HTTPException) as error:
         derive_request([item()], {**ADDRESS, "postal_code": postal}, "equal_volumes", uuid4())
     assert error.value.status_code == 422 and error.value.detail["code"] == "invalid_cart_address"
 
 
-@pytest.mark.parametrize(
+@testrunner.mark.parametrize(
     "items,mode,code",
     [
         ([item(), item(length_cm=16, width_cm=23)], "equal_volumes", "unequal_volumes"),
@@ -70,6 +70,6 @@ def test_engine_requires_canonical_destination_and_preserves_leading_zero(postal
     ],
 )
 def test_unrepresentable_volumes_and_quote_limits_do_not_invent_geometry(items, mode, code):
-    with pytest.raises(HTTPException) as error:
+    with testrunner.raises(HTTPException) as error:
         derive_request(items, ADDRESS, mode, uuid4())
     assert error.value.status_code == 422 and error.value.detail["code"] == code

@@ -1,5 +1,8 @@
 # 07 — Motor de cotação e snapshots
 
+> **Registro histórico pré-prompt 19:** o comando pytest abaixo é evidência da rodada original; hoje
+> a suíte usa jsr-testrunner. Veja `docs/development-testing.md`.
+
 Fonte contratual: `docs/reference/gestao-frete-integracao-ecommerce-teste.md`, lida antes da integração.
 L54–L73 orientam unidades/volumes; L121–L180 respostas; L184–L188 idempotência, fonte servidor e escolha local.
 Nenhum endpoint, payload, status ou permissão adicional de Packsenvios foi inventado.

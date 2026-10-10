@@ -1,5 +1,8 @@
 # 09 — Frontend catálogo e carrinho
 
+> **Registro histórico pré-prompt 19:** comandos pytest e variável `PYTEST_ADDOPTS` abaixo são da
+> execução original; a interface atual é `python scripts/dev.py test`/jsr-testrunner.
+
 Raiz: `E:\Softwares\joao\tests`. Reutiliza design system, React Router, TanStack Query e cliente
 same-origin da etapa 08. Nenhuma integração, endpoint ou contrato externo Packsenvios foi implementado.
 

@@ -1,5 +1,8 @@
 # Bootstrap executado diretamente na raiz atual
 
+> **Registro histórico pré-prompt 19:** comandos/resultados abaixo referem-se ao framework então usado.
+> Os comandos atuais de testes usam jsr-testrunner; veja `docs/development-testing.md`.
+
 Data: 08/10/2026. `Get-Location` confirmou **`E:\Softwares\joao\tests`**.
 O diretório estava vazio antes da execução. Backend, frontend, testes, documentação
 e infraestrutura foram criados diretamente nele; nenhuma pasta intermediária de projeto foi criada.

@@ -19,7 +19,7 @@ Node 24.15.0, npm 11.12.1, Docker 29.4.1 e Compose 5.1.3. WSL2 observado: kernel
 | Windows: `python scripts/dev.py doctor`, `env-check`, `compose-check` | PASS; mock offline, sem expor valores |
 | Windows: `scripts/dev.ps1 doctor` | PASS; wrapper inicia CLI e detecta ferramentas/daemon |
 | Windows: `python scripts/dev.py setup` | PASS; Poetry sync e npm ci, sem lockfile alterado |
-| Windows: `python scripts/dev.py check` | PASS; pytest 280/280, Vitest 54/54, Ruff, ESLint, Prettier, typecheck/build e matriz contratual |
+| Windows: `python scripts/dev.py check` | PASS; suíte Python via pytest (histórico pré-prompt 19) 280/280, Vitest 54/54, Ruff, ESLint, Prettier, typecheck/build e matriz contratual |
 | Windows: `python scripts/dev.py layout` | PASS; Playwright Edge 5/5 (viewports 320, 390, 768, 1280 e keyboard/runtime disclosure) |
 | Windows: `python scripts/dev.py smoke` | PASS; FastAPI HTTP, Vite e proxy local |
 | Windows: `python scripts/dev.py up` | PASS; imagens backend/frontend, PostgreSQL 17 e os 3 healthchecks |

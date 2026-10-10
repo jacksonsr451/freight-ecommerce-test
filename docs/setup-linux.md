@@ -36,12 +36,15 @@ python3 scripts/dev.py seed
 export TEST_DATABASE_URL='postgresql+psycopg://freight_local:local_demo_only@127.0.0.1:5432/freight_local'
 python3 scripts/dev.py check
 python3 scripts/dev.py persistence-check
+python3 scripts/dev.py backend-test
 ```
 
 Os testes criam e removem somente schemas aleatórios próprios. Não configure `TEST_DATABASE_URL` para
 produção, host remoto ou banco compartilhado. Alternativamente, `TEST_POSTGRES_BIN` aponta para um
 PostgreSQL local que possua `initdb` e `pg_ctl`; a fixture inicia e encerra um cluster descartável.
 `check` falha explicitamente se não houver uma dessas opções, em vez de omitir os testes PostgreSQL.
+Os testes Python rodam em jsr-testrunner (`poetry run testrunner` em `backend/`), sem plugin de
+asyncio externo. A imagem runtime não instala dependências de teste.
 
 ## Execução no host
 
@@ -67,6 +70,15 @@ python3 scripts/dev.py down
 `down` mantém o volume persistente. `python3 scripts/dev.py compose-smoke` cria um projeto/volume
 temporário exclusivo, verifica backend, banco e proxy e remove somente esses recursos próprios.
 Compose aguarda healthchecks, mas migrations e seed continuam explícitos.
+
+Para executar a suíte Python no container de teste isolado, incluindo PostgreSQL 17 efêmero:
+
+```bash
+python3 scripts/dev.py compose-test
+```
+
+O perfil instala o grupo Poetry `dev` só na imagem de teste e remove seu container, rede e volume ao
+final, inclusive quando os testes falham.
 
 ## Playwright e solução de problemas
 

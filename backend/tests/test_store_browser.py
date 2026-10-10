@@ -8,7 +8,7 @@ from pathlib import Path
 from urllib.error import URLError
 from urllib.request import urlopen
 
-import pytest
+import testrunner
 from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
@@ -36,7 +36,7 @@ from freight_ecommerce.domain.states import (
 )
 
 ROOT = Path(__file__).resolve().parents[2]
-pytestmark = [pytest.mark.postgres, pytest.mark.browser]
+_testrunner_mark = [testrunner.mark.postgres, testrunner.mark.browser]
 
 
 def free_port():
@@ -96,7 +96,7 @@ def test_store_journey_in_real_browser_uses_real_api_and_postgres(db_engine, tmp
         or not browser_available(browser_channel)
         or not (ROOT / "frontend/node_modules/@playwright/test").is_dir()
     ):
-        pytest.skip(
+        testrunner.skip(
             "Live store requires Node, frontend dependencies and installed browser channel "
             f"{browser_channel}"
         )

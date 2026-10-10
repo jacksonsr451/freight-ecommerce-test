@@ -5,7 +5,7 @@
 de projeto intermediário. Os comandos do projeto localizam a raiz a partir do script, não do cwd.
 
 Bootstrap local com **Poetry + FastAPI + Pydantic** e **React + TypeScript + Vite**.
-Inclui pytest, Ruff, ESLint, Prettier e Vitest; dependências exatas nos lockfiles.
+Inclui jsr-testrunner, Ruff, ESLint, Prettier e Vitest; dependências exatas nos lockfiles.
 Inclui catálogo, checkout, pedidos/pagamentos simulados, painel administrativo, importação condicionada
 e diagnóstico seguro. A cotação pode usar o adapter real; o modo mock e as operações reais de despacho,
 tracking e webhook permanecem separados e explicitamente não homologados sem evidência externa.
@@ -20,6 +20,7 @@ O ponto de entrada multiplataforma é `python scripts/dev.py <task>`. `scripts/d
 - `docs/homologacao.md`
 - `docs/checklist-go-no-go.md`
 - `docs/architecture/compatibility-evidence-prompt18.md`
+- `docs/development-testing.md`
 
 ## Pré-requisitos e instalação (Windows e Linux)
 
@@ -40,6 +41,22 @@ python scripts/dev.py smoke
 `frontend/`. Poetry instala o backend; npm instala o frontend. `check` exige PostgreSQL de teste,
 executa as verificações completas e não trata testes persistentes SKIP como PASS. Detalhes específicos
 por sistema: `docs/setup-windows.md` e `docs/setup-linux.md`.
+
+## Testes Python (jsr-testrunner)
+
+O único framework de testes Python próprio é `jsr-testrunner==0.1.0` (import `testrunner`, comando
+`testrunner`). O comando padrão, da raiz, é:
+
+```text
+python scripts/dev.py test
+```
+
+Ele executa a suíte Python com jsr-testrunner e os testes Vitest do frontend. `check` acrescenta lint,
+format, build e conferência contratual. `persistence-check` executa somente testes com PostgreSQL.
+Defina `TEST_DATABASE_URL` para PostgreSQL loopback de teste; os testes criam e removem somente schemas
+`freight_test_*` aleatórios. O adapter local `backend/tests/_testrunner_support.py` agenda corrotinas e
+fixtures assíncronas no mesmo event loop asyncio por teste.
+Detalhes da migração, baseline e limitações estão em `docs/development-testing.md`.
 
 ## Inicialização no host
 
@@ -70,6 +87,11 @@ Credenciais do exemplo são somente sintéticas/locais. No host, ajuste também 
 ao mudar a porta da API. No Compose, proxy usa `http://backend:8000`.
 O domínio e a migration inicial estão implementados. A API de bootstrap ainda não usa o banco;
 o healthcheck não verifica persistência. Migrations não são executadas automaticamente.
+
+Para executar toda a suíte Python dentro de um projeto Compose isolado (com perfil de teste, imagem
+com dependências dev e PostgreSQL próprios), use `python scripts/dev.py compose-test`. O comando
+remove containers, rede e volume temporário no fim; a imagem runtime `backend` continua sem dependências
+de teste.
 
 ## Persistência e migrations (prompt 03)
 
@@ -371,7 +393,7 @@ evidência local de idempotência/compensação inadvertidamente. Só em schema 
 
 ## Convenções e configuração
 
-- Backend em `backend/src/freight_ecommerce`, app factory e schemas Pydantic; pytest em `backend/tests`.
+- Backend em `backend/src/freight_ecommerce`, app factory e schemas Pydantic; jsr-testrunner em `backend/tests`.
 - Frontend TS strict, ESLint flat config, Prettier; Vitest/jsdom com testes junto aos componentes.
 - Ruff compartilhado em `.ruff.toml`. Scripts de verificação transversal em `tests/`.
 - Backend lê `.env` da raiz; variáveis de processo têm precedência. Configurações: `APP_ENVIRONMENT`
@@ -387,7 +409,7 @@ evidência local de idempotência/compensação inadvertidamente. Só em schema 
 
 ```text
 .
-├── backend/          # Poetry, FastAPI, Pydantic, pytest
+├── backend/          # Poetry, FastAPI, Pydantic, jsr-testrunner
 ├── frontend/         # React, TypeScript, Vite, Vitest
 ├── tests/            # Smoke HTTP e conferência contratual
 ├── docs/reference/   # Documento original

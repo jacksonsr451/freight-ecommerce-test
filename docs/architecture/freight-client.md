@@ -1,5 +1,8 @@
 # 06 — Cliente Packsenvios e configuração segura
 
+> **Registro histórico pré-prompt 19:** resultados de pytest abaixo são da rodada original; hoje a
+> suíte Python usa jsr-testrunner. Veja `docs/development-testing.md`.
+
 Fonte contratual lida integralmente: `docs/reference/gestao-frete-integracao-ecommerce-teste.md`.
 Adapter em `backend/src/freight_ecommerce/freight/`, sem dependência de Cart/ORM/FastAPI.
 Compartilha apenas a localização do `.env` da raiz com a configuração do backend.

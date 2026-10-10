@@ -1,5 +1,8 @@
 # Plano de execução e inventário de ambiente — freight-ecommerce-test (Prompt 00)
 
+> **Inventário histórico pré-prompt 01:** as menções a pytest abaixo descrevem o plano inicial, antes
+> da criação do backend; o runner efetivo atual é jsr-testrunner.
+
 ## 1. Inventário do ambiente (auditado em 08/10/2026)
 
 | Item | Valor detectado | Observação |

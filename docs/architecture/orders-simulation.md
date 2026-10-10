@@ -1,5 +1,8 @@
 # 11 — Pedido local e pagamento simulado
 
+> **Registro histórico pré-prompt 19:** o comando pytest abaixo registra a rodada original; a suíte
+> atual usa jsr-testrunner. Veja `docs/development-testing.md`.
+
 Raiz do projeto: `E:\Softwares\joao\tests`. Fonte externa de cotação: referência local versionada;
 este fluxo não implementa nem presume novos contratos Packsenvios.
 

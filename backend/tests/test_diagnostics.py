@@ -1,7 +1,8 @@
 from uuid import UUID, uuid4
 
 import httpx
-import pytest
+import testrunner
+from _testrunner_support import async_fixture
 from domain_fixtures import make_graph
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.exc import OperationalError
@@ -17,18 +18,13 @@ from freight_ecommerce.freight.schemas import QuoteRequest
 from freight_ecommerce.freight.synthetic import SyntheticQuoteTransport
 from freight_ecommerce.main import create_app
 
-pytestmark = [pytest.mark.postgres, pytest.mark.anyio]
+_testrunner_mark = [testrunner.mark.postgres]
 TOKEN = "synthetic-diagnostic-bearer-never-log"
 EMAIL = "synthetic-diagnostic-buyer@example.invalid"
 DOCUMENT = "52998224725"
 
 
-@pytest.fixture
-def anyio_backend():
-    return "asyncio"
-
-
-@pytest.fixture
+@async_fixture
 async def diagnostic_app(db_engine):
     client = PacksenviosClient(
         FreightSettings(_env_file=None, mode="mock"), transport=SyntheticQuoteTransport()
@@ -106,7 +102,7 @@ async def test_diagnostics_exposes_correlated_safe_fields_and_redacted_snapshot(
     assert report["pending_webhook_receipts"] == 1
 
 
-@pytest.mark.parametrize("failure", ["network", "timeout"])
+@testrunner.mark.parametrize("failure", ["network", "timeout"])
 async def test_network_and_timeout_logs_are_structured_and_redacted(caplog, failure):
     correlation = str(uuid4())
 
@@ -145,7 +141,7 @@ async def test_network_and_timeout_logs_are_structured_and_redacted(caplog, fail
     )
     try:
         with caplog.at_level("INFO", logger="freight_ecommerce.freight.client"):
-            with bind_correlation_id(correlation), pytest.raises(FreightError):
+            with bind_correlation_id(correlation), testrunner.raises(FreightError):
                 await client.create_quote(request)
         records = [
             record

@@ -1,4 +1,5 @@
-import pytest
+import testrunner
+from _testrunner_support import async_fixture
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import event, func, select
 from sqlalchemy.exc import IntegrityError
@@ -11,7 +12,7 @@ from freight_ecommerce.database import transaction
 from freight_ecommerce.domain.models import Inventory, Product
 from freight_ecommerce.main import create_app
 
-pytestmark = [pytest.mark.postgres, pytest.mark.anyio]
+_testrunner_mark = [testrunner.mark.postgres]
 ADMIN_HEADERS = {"X-Local-Admin-Key": "synthetic-local-admin-key-for-tests-only"}
 VALID_PRODUCT = {
     "sku": "SYNTHETIC-API",
@@ -26,12 +27,7 @@ VALID_PRODUCT = {
 }
 
 
-@pytest.fixture
-def anyio_backend():
-    return "asyncio"
-
-
-@pytest.fixture
+@async_fixture
 async def catalog_client(db_engine):
     with transaction(db_engine) as session:
         seed_demo_catalog(session)
@@ -185,7 +181,7 @@ async def test_inventory_insert_failure_rolls_back_new_product(catalog_client, d
         assert session.scalar(select(func.count()).select_from(Inventory)) == 7
 
 
-@pytest.mark.parametrize(
+@testrunner.mark.parametrize(
     "field,value",
     [
         ("price_cents", -1),
@@ -218,7 +214,7 @@ async def test_invalid_admin_payload_is_rejected_without_partial_product(
         assert session.scalar(select(func.count()).select_from(Product)) == 7
 
 
-@pytest.mark.parametrize(
+@testrunner.mark.parametrize(
     "payload", [{}, {"price_cents": None}, {"reserved": 1}, {"price_cents": 1.2}]
 )
 async def test_patch_rejects_empty_null_and_unsupported_fields(catalog_client, payload):
@@ -231,12 +227,12 @@ async def test_patch_rejects_empty_null_and_unsupported_fields(catalog_client, p
     assert response.status_code == 422
 
 
-@pytest.mark.parametrize("query", ["page=0", "page_size=0", "page_size=101"])
+@testrunner.mark.parametrize("query", ["page=0", "page_size=0", "page_size=101"])
 async def test_pagination_limits_are_validated(catalog_client, query):
     assert (await catalog_client.get(f"/api/products?{query}")).status_code == 422
 
 
-@pytest.mark.parametrize("quantity", [0, -1, 1.5, "1", True, 1001])
+@testrunner.mark.parametrize("quantity", [0, -1, 1.5, "1", True, 1001])
 async def test_stock_quantity_is_strict_and_bounded(catalog_client, quantity):
     items = (await catalog_client.get("/api/products")).json()["items"]
     response = await catalog_client.post(

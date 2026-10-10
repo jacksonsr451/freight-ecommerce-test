@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock
 from uuid import UUID, uuid4
 
 import httpx
-import pytest
+import testrunner
 from pydantic import ValidationError
 
 from freight_ecommerce.freight.client import PacksenviosClient, build_freight_client
@@ -33,11 +33,6 @@ REQUEST = {
 }
 
 
-@pytest.fixture
-def anyio_backend():
-    return "asyncio"
-
-
 def fixture(name="quoted"):
     return json.loads((FIXTURES / f"{name}.json").read_text(encoding="utf-8"))
 
@@ -56,8 +51,7 @@ def settings(**overrides):
     )
 
 
-@pytest.mark.anyio
-@pytest.mark.parametrize("scenario", ["quoted", "unavailable", "fiscal_review"])
+@testrunner.mark.parametrize("scenario", ["quoted", "unavailable", "fiscal_review"])
 async def test_post_and_get_contract_headers_body_context_and_optional_fields(scenario):
     calls = []
     location = uuid4()
@@ -103,7 +97,6 @@ async def test_post_and_get_contract_headers_body_context_and_optional_fields(sc
             assert result.data.options == []  # no invented price/offer fallback
 
 
-@pytest.mark.anyio
 async def test_timeout_retries_exact_prepared_bytes_and_never_regenerates_key(caplog):
     payloads = []
     sleeper = AsyncMock()
@@ -125,7 +118,6 @@ async def test_timeout_retries_exact_prepared_bytes_and_never_regenerates_key(ca
     assert sleeper.await_count == 1 and API_KEY not in caplog.text
 
 
-@pytest.mark.anyio
 async def test_exhausted_network_error_has_no_request_response_or_raw_exception_context():
     def handler(request):
         raise httpx.ConnectError(f"private {API_KEY}", request=request)
@@ -133,15 +125,14 @@ async def test_exhausted_network_error_has_no_request_response_or_raw_exception_
     async with PacksenviosClient(
         settings(max_attempts=1), transport=httpx.MockTransport(handler)
     ) as client:
-        with pytest.raises(FreightError) as error:
+        with testrunner.raises(FreightError) as error:
             await client.create_quote(QuoteRequest(**REQUEST))
     assert error.value.code == "transport_error"
     assert error.value.__context__ is None and API_KEY not in str(error.value)
     assert not hasattr(error.value, "request") and not hasattr(error.value, "response")
 
 
-@pytest.mark.anyio
-@pytest.mark.parametrize(
+@testrunner.mark.parametrize(
     "status,code",
     [
         (401, "unauthorized"),
@@ -174,7 +165,7 @@ async def test_http_errors_are_normalized_without_echoing_messages_headers_or_bo
         async with PacksenviosClient(
             settings(max_attempts=1), transport=httpx.MockTransport(handler)
         ) as client:
-            with pytest.raises(FreightError) as error:
+            with testrunner.raises(FreightError) as error:
                 await client.create_quote(QuoteRequest(**REQUEST))
     assert error.value.http_status == status and error.value.code == code
     assert error.value.fields == ("destination_postal_code",)
@@ -182,8 +173,7 @@ async def test_http_errors_are_normalized_without_echoing_messages_headers_or_bo
     assert error.value.__context__ is None
 
 
-@pytest.mark.anyio
-@pytest.mark.parametrize("status", [401, 403, 404, 409, 422, 500])
+@testrunner.mark.parametrize("status", [401, 403, 404, 409, 422, 500])
 async def test_nonretryable_status_does_not_sleep_or_repeat(status):
     calls = []
     sleep = AsyncMock()
@@ -195,13 +185,12 @@ async def test_nonretryable_status_does_not_sleep_or_repeat(status):
     async with PacksenviosClient(
         settings(max_attempts=3), transport=httpx.MockTransport(handler), sleep=sleep
     ) as client:
-        with pytest.raises(FreightError):
+        with testrunner.raises(FreightError):
             await client.create_quote(QuoteRequest(**REQUEST))
     assert len(calls) == 1 and sleep.await_count == 0
 
 
-@pytest.mark.anyio
-@pytest.mark.parametrize("status", [429, 503])
+@testrunner.mark.parametrize("status", [429, 503])
 async def test_retry_after_seconds_and_http_date_are_respected(status):
     now = datetime(2026, 10, 8, 12, tzinfo=UTC)
     header = "3" if status == 429 else format_datetime(now + timedelta(seconds=4), usegmt=True)
@@ -224,7 +213,6 @@ async def test_retry_after_seconds_and_http_date_are_respected(status):
     sleep.assert_awaited_once_with(3 if status == 429 else 4)
 
 
-@pytest.mark.anyio
 async def test_long_retry_after_is_returned_without_clamping_into_an_early_retry():
     calls = []
     sleep = AsyncMock()
@@ -236,13 +224,12 @@ async def test_long_retry_after_is_returned_without_clamping_into_an_early_retry
     async with PacksenviosClient(
         settings(), transport=httpx.MockTransport(handler), sleep=sleep
     ) as client:
-        with pytest.raises(FreightError) as error:
+        with testrunner.raises(FreightError) as error:
             await client.create_quote(QuoteRequest(**REQUEST))
     assert error.value.retry_after_seconds == 3600
     assert len(calls) == 1 and sleep.await_count == 0
 
 
-@pytest.mark.anyio
 async def test_redirect_does_not_forward_bearer_to_another_host():
     calls = []
 
@@ -251,12 +238,11 @@ async def test_redirect_does_not_forward_bearer_to_another_host():
         return httpx.Response(302, headers={"Location": "https://different.example.test/collect"})
 
     async with PacksenviosClient(settings(), transport=httpx.MockTransport(handler)) as client:
-        with pytest.raises(FreightError) as error:
+        with testrunner.raises(FreightError) as error:
             await client.create_quote(QuoteRequest(**REQUEST))
     assert error.value.http_status == 302 and calls == ["authorized.example.test"]
 
 
-@pytest.mark.anyio
 async def test_mock_mode_is_offline_synthetic_and_replay_and_divergent_422_match_contract():
     observed = []
     server = SyntheticQuoteTransport()
@@ -273,19 +259,18 @@ async def test_mock_mode_is_offline_synthetic_and_replay_and_divergent_422_match
         replay = await client.create_quote(request)
         assert replay == first
         assert (await client.get_quote(first.data.id)) == first
-        with pytest.raises(FreightError) as error:
+        with testrunner.raises(FreightError) as error:
             await client.create_quote(QuoteRequest(**{**REQUEST, "declared_value_cents": 20000}))
         assert error.value.http_status == 422 and error.value.code == "request_key_conflict"
         assert error.value.fields == ("request_key",) and str(error.value) == CONFLICT_MESSAGE
-        with pytest.raises(FreightError) as lookup:
+        with testrunner.raises(FreightError) as lookup:
             await client.get_quote(request.request_key)
         assert lookup.value.http_status == 404
     assert set(observed) == {f"Bearer {SYNTHETIC_KEY}"}
     assert all(API_KEY not in header for header in observed)
 
 
-@pytest.mark.anyio
-@pytest.mark.parametrize("scenario", ["quoted", "unavailable", "fiscal_review"])
+@testrunner.mark.parametrize("scenario", ["quoted", "unavailable", "fiscal_review"])
 async def test_default_factory_mock_needs_no_credentials_or_network(scenario):
     async with build_freight_client(
         FreightSettings(_env_file=None, mock_scenario=scenario)
@@ -294,7 +279,6 @@ async def test_default_factory_mock_needs_no_credentials_or_network(scenario):
         assert response.data.status == scenario
 
 
-@pytest.mark.anyio
 async def test_optional_flags_are_unknown_not_false_and_extra_snapshot_fields_are_preserved():
     body = fixture()
     body["data"]["options"] = [
@@ -315,7 +299,6 @@ async def test_optional_flags_are_unknown_not_false_and_extra_snapshot_fields_ar
     assert option.model_dump()["future_field"] == {"version": 2}
 
 
-@pytest.mark.anyio
 async def test_get_accepts_historical_status_and_selection_without_a_closed_enum():
     body = fixture("unavailable")
     body["data"]["status"] = "selected"
@@ -327,8 +310,7 @@ async def test_get_accepts_historical_status_and_selection_without_a_closed_enum
     assert result.data.status == "selected" and result.data.selection.price_cents == 2590
 
 
-@pytest.mark.anyio
-@pytest.mark.parametrize(
+@testrunner.mark.parametrize(
     "kind",
     [
         "quoted_empty",
@@ -356,7 +338,7 @@ async def test_inconsistent_responses_are_protocol_errors_not_fallback_offers(ki
     async with PacksenviosClient(
         settings(), transport=httpx.MockTransport(lambda req: httpx.Response(200, json=body))
     ) as client:
-        with pytest.raises(FreightError) as error:
+        with testrunner.raises(FreightError) as error:
             await client.create_quote(QuoteRequest(**REQUEST))
     assert error.value.code == "invalid_response" and error.value.__context__ is None
 
@@ -379,30 +361,29 @@ def test_prepared_quote_is_immutable_canonical_and_nested_inputs_do_not_change_i
     assert json.loads(prepared.payload)["weight_kg"] == "1.000"
     assert json.loads(prepared.payload)["destination_postal_code"] == "20040002"
     assert json.loads(prepared.payload)["volumes"][0]["weight_grams"] == 1000
-    with pytest.raises(FrozenInstanceError):
+    with testrunner.raises(FrozenInstanceError):
         prepared.payload = b"mutated"
-    with pytest.raises(ValidationError):
+    with testrunner.raises(ValidationError):
         request.volumes[0].weight_grams = 1
     canonical_request = QuoteRequest(**{**REQUEST, "volumes": list(request.volumes)})
     assert client.prepare_quote(canonical_request) == prepared
 
 
-@pytest.mark.anyio
 async def test_prepared_quote_cannot_be_tampered_and_context_is_backend_fixed():
     calls = []
     async with PacksenviosClient(
         settings(), transport=httpx.MockTransport(lambda req: calls.append(req))
     ) as client:
         for fields in [{"freight_company_id": uuid4()}, {"freight_location_id": uuid4()}]:
-            with pytest.raises(ValueError, match="configured backend context"):
+            with testrunner.raises(ValueError, match="configured backend context"):
                 await client.create_quote(QuoteRequest(**{**REQUEST, **fields}))
         prepared = client.prepare_quote(QuoteRequest(**REQUEST))
-        with pytest.raises(ValueError, match="canonical backend context"):
+        with testrunner.raises(ValueError, match="canonical backend context"):
             await client.create_quote(replace(prepared, criteria_fingerprint="a" * 64))
     assert calls == []
 
 
-@pytest.mark.parametrize(
+@testrunner.mark.parametrize(
     "changes",
     [
         {"weight_kg": "0"},
@@ -429,11 +410,11 @@ async def test_prepared_quote_cannot_be_tampered_and_context_is_backend_fixed():
     ],
 )
 def test_invalid_contract_criteria_are_rejected_before_http(changes):
-    with pytest.raises(ValidationError):
+    with testrunner.raises(ValidationError):
         QuoteRequest(**{**REQUEST, **changes})
 
 
-@pytest.mark.parametrize(
+@testrunner.mark.parametrize(
     "base",
     [
         "http://external.example.test",
@@ -445,22 +426,21 @@ def test_invalid_contract_criteria_are_rejected_before_http(changes):
     ],
 )
 def test_base_url_configuration_rejects_unsafe_or_wrong_application_roots(base):
-    with pytest.raises(ValidationError):
+    with testrunner.raises(ValidationError):
         settings(base_url=base)
 
 
 def test_real_configuration_requires_url_key_company_and_masks_credential_validation():
     for missing in ("base_url", "api_key", "company_id"):
-        with pytest.raises(ValidationError):
+        with testrunner.raises(ValidationError):
             settings(**{missing: None if missing != "api_key" else ""})
-    with pytest.raises(ValidationError) as error:
+    with testrunner.raises(ValidationError) as error:
         settings(base_url=f"https://example.test/{API_KEY}")
     assert API_KEY not in str(error.value)
     assert API_KEY not in repr(settings()) and API_KEY not in settings().model_dump_json()
     assert settings(base_url="http://127.0.0.1:8080/").base_url == "http://127.0.0.1:8080"
 
 
-@pytest.mark.anyio
 async def test_library_log_filter_does_not_change_unrelated_logs(caplog):
     async with build_freight_client(FreightSettings(_env_file=None)) as client:
         await client.create_quote(QuoteRequest(**REQUEST))
@@ -469,7 +449,6 @@ async def test_library_log_filter_does_not_change_unrelated_logs(caplog):
     assert "ordinary unrelated diagnostic" in caplog.text
 
 
-@pytest.mark.anyio
 async def test_timeout_after_server_persistence_replays_original_quote_not_new_scenario():
     server = SyntheticQuoteTransport("quoted")
     calls = []
@@ -490,13 +469,12 @@ async def test_timeout_after_server_persistence_replays_original_quote_not_new_s
         assert len(server.by_id) == 1 and calls[0] == calls[1]
 
 
-@pytest.mark.anyio
 async def test_real_company_without_units_requires_origin_and_location_can_resolve_it():
     no_origin = {key: value for key, value in REQUEST.items() if key != "origin_postal_code"}
     async with PacksenviosClient(
         settings(), transport=httpx.MockTransport(lambda req: httpx.Response(200))
     ) as client:
-        with pytest.raises(ValueError, match="explicit origin"):
+        with testrunner.raises(ValueError, match="explicit origin"):
             client.prepare_quote(QuoteRequest(**no_origin))
     location = uuid4()
     async with PacksenviosClient(
@@ -520,7 +498,7 @@ def test_weight_only_and_invoice_count_and_volume_count_rules_follow_simple_quot
     )
     assert "length_cm" not in json.loads(weight_only.canonical_bytes())
     assert json.loads(weight_only.canonical_bytes())["invoice_count"] == 0
-    with pytest.raises(ValidationError, match="volume count"):
+    with testrunner.raises(ValidationError, match="volume count"):
         QuoteRequest(
             **{
                 **REQUEST,
@@ -532,12 +510,13 @@ def test_weight_only_and_invoice_count_and_volume_count_rules_follow_simple_quot
         )
 
 
-@pytest.mark.parametrize("value,expected", [("0", 0), ("-1", None), ("later", None), ("1.5", None)])
+@testrunner.mark.parametrize(
+    "value,expected", [("0", 0), ("-1", None), ("later", None), ("1.5", None)]
+)
 def test_retry_after_invalid_values_do_not_become_negative_or_fractional_waits(value, expected):
     assert parse_retry_after(value, datetime(2026, 10, 8, 12, tzinfo=UTC)) == expected
 
 
-@pytest.mark.anyio
 async def test_retry_wait_budget_is_total_not_a_reason_to_retry_early():
     calls = []
     sleep = AsyncMock()
@@ -551,7 +530,7 @@ async def test_retry_wait_budget_is_total_not_a_reason_to_retry_early():
         transport=httpx.MockTransport(handler),
         sleep=sleep,
     ) as client:
-        with pytest.raises(FreightError) as error:
+        with testrunner.raises(FreightError) as error:
             await client.create_quote(QuoteRequest(**REQUEST))
     assert len(calls) == 2 and calls[0] == calls[1]
     assert error.value.retry_after_seconds == 3

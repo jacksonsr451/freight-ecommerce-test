@@ -247,7 +247,7 @@ def backend_check() -> None:
     run(poetry("run", "ruff", "format", "--check", "."), cwd=BACKEND)
     run(poetry("run", "ruff", "check", str(ROOT / "tests")), cwd=BACKEND)
     run(poetry("run", "ruff", "format", "--check", str(ROOT / "tests")), cwd=BACKEND)
-    run(poetry("run", "pytest"), cwd=BACKEND)
+    run(poetry("run", "testrunner"), cwd=BACKEND)
     run(poetry("run", "python", str(ROOT / "tests" / "validate_contract_matrix.py")), cwd=BACKEND)
 
 
@@ -326,12 +326,39 @@ def compose_smoke() -> None:
         run(compose("down", "--volumes", "--remove-orphans"), env=env, check=False)
 
 
+def compose_test() -> None:
+    env = os.environ.copy()
+    env["COMPOSE_PROJECT_NAME"] = f"freight-tests-{os.getpid()}".lower()
+    env["POSTGRES_PORT"] = str(free_port())
+    try:
+        run(
+            compose(
+                "--profile",
+                "test",
+                "up",
+                "--build",
+                "--abort-on-container-exit",
+                "--exit-code-from",
+                "backend-test",
+                "backend-test",
+            ),
+            env=env,
+        )
+    finally:
+        run(
+            compose("--profile", "test", "down", "--volumes", "--remove-orphans"),
+            env=env,
+            check=False,
+        )
+
+
 def doctor() -> None:
     print(f"Project root: {ROOT}")
     print(f"Operating system: {platform.platform()}")
     versions = {
         "python": [sys.executable, "--version"],
         "poetry": ["poetry", "--version"],
+        "jsr-testrunner": ["poetry", "run", "testrunner", "--version"],
         "node": ["node", "--version"],
         "npm": ["npm", "--version"],
         "docker": ["docker", "--version"],
@@ -345,7 +372,7 @@ def doctor() -> None:
         try:
             result = subprocess.run(
                 [executable, *command[1:]],
-                cwd=ROOT,
+                cwd=BACKEND if name == "jsr-testrunner" else ROOT,
                 shell=False,
                 capture_output=True,
                 text=True,
@@ -369,9 +396,9 @@ def doctor() -> None:
 
 def clean() -> None:
     generated = (
-        BACKEND / ".pytest_cache",
+        BACKEND / ".testrunner_cache",
         BACKEND / ".ruff_cache",
-        ROOT / ".pytest_cache",
+        ROOT / ".testrunner_cache",
         ROOT / ".ruff_cache",
         FRONTEND / "dist",
         FRONTEND / "coverage",
@@ -408,6 +435,7 @@ def main() -> int:
         "compose-check": lambda: run(compose("config", "--quiet")),
         "compose-build": lambda: run(compose("build")),
         "compose-smoke": compose_smoke,
+        "compose-test": compose_test,
         "migrate": lambda: (
             assert_local_database(),
             run(poetry("run", "alembic", "upgrade", "head"), cwd=BACKEND),
@@ -443,12 +471,12 @@ def main() -> int:
         "frontend": lambda: run(npm("run", "dev"), cwd=FRONTEND),
         "backend-test": lambda: (
             test_database_configured(),
-            run(poetry("run", "pytest"), cwd=BACKEND),
+            run(poetry("run", "testrunner"), cwd=BACKEND),
         ),
         "frontend-test": lambda: run(npm("run", "test"), cwd=FRONTEND),
         "test": lambda: (
             test_database_configured(),
-            run(poetry("run", "pytest"), cwd=BACKEND),
+            run(poetry("run", "testrunner"), cwd=BACKEND),
             run(npm("run", "test"), cwd=FRONTEND),
         ),
         "backend-check": backend_check,
@@ -466,7 +494,7 @@ def main() -> int:
         "layout": lambda: run(npm("run", "test:layout"), cwd=FRONTEND, env=browser_environment()),
         "persistence-check": lambda: (
             test_database_configured(),
-            run(poetry("run", "pytest", "-m", "postgres"), cwd=BACKEND),
+            run(poetry("run", "testrunner", "-m", "postgres"), cwd=BACKEND),
         ),
         "contract": lambda: run(
             [sys.executable, str(ROOT / "tests" / "validate_contract_matrix.py")]

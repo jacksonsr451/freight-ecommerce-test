@@ -46,6 +46,7 @@ aleatórios próprios; prefira um database separado. Em PowerShell:
 $env:TEST_DATABASE_URL = 'postgresql+psycopg://freight_local:local_demo_only@127.0.0.1:5432/freight_local'
 python scripts/dev.py check
 python scripts/dev.py persistence-check
+python scripts/dev.py backend-test
 python scripts/dev.py layout
 python scripts/dev.py smoke
 ```
@@ -53,6 +54,8 @@ python scripts/dev.py smoke
 Alternativamente, defina `TEST_POSTGRES_BIN` para um diretório PostgreSQL que contenha `initdb.exe` e
 `pg_ctl.exe`; a fixture sobe um cluster descartável em loopback. Sem essas variáveis, `check` para com
 erro explícito em vez de declarar a suíte PostgreSQL como PASS.
+Os testes Python usam jsr-testrunner 0.1.0; o pacote é instalado no grupo Poetry `dev`, fora da
+imagem runtime.
 
 Playwright usa Edge headless por padrão no Windows. Para Chromium instalado com Playwright, defina
 `PLAYWRIGHT_BROWSER_CHANNEL=chromium` e execute
@@ -70,6 +73,14 @@ python scripts/dev.py down
 `down` preserva o volume PostgreSQL. `python scripts/dev.py compose-smoke` usa um nome de projeto e
 portas temporários próprios, verifica saúde/proxy/diagnóstico e remove somente seu volume temporário.
 Nunca use `docker compose down --volumes` no projeto normal se precisar preservar dados locais.
+
+Para executar a suíte Python em container com PostgreSQL 17 e dependências de teste isolados:
+
+```powershell
+python scripts/dev.py compose-test
+```
+
+O task usa um nome de projeto, porta e volume próprios; sempre remove o stack temporário no cleanup.
 
 ## Problemas comuns
 

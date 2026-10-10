@@ -2,7 +2,8 @@ import asyncio
 from copy import deepcopy
 from uuid import UUID, uuid4
 
-import pytest
+import testrunner
+from _testrunner_support import async_fixture
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import event, func, select
 from sqlalchemy.exc import IntegrityError
@@ -15,7 +16,7 @@ from freight_ecommerce.domain import models as m
 from freight_ecommerce.domain.states import CartStatus, CheckoutStatus, QuoteStatus
 from freight_ecommerce.main import create_app
 
-pytestmark = [pytest.mark.postgres, pytest.mark.anyio]
+_testrunner_mark = [testrunner.mark.postgres]
 ADDRESS = {
     "postal_code": "01001000",
     "street": "Rua sintética",
@@ -27,12 +28,7 @@ ADDRESS = {
 }
 
 
-@pytest.fixture
-def anyio_backend():
-    return "asyncio"
-
-
-@pytest.fixture
+@async_fixture
 async def client(db_engine):
     with transaction(db_engine) as session:
         seed_demo_catalog(session)
@@ -184,7 +180,7 @@ async def test_cart_persists_add_merge_set_remove_and_authoritative_totals(clien
         assert all(stock.reserved == 0 for stock in session.scalars(select(m.Inventory)))
 
 
-@pytest.mark.parametrize("kind", ["add", "quantity", "remove", "address", "clear_address"])
+@testrunner.mark.parametrize("kind", ["add", "quantity", "remove", "address", "clear_address"])
 async def test_changes_invalidate_quote_and_preserve_ids_snapshots(client, db_engine, kind):
     cart = (await add(client, await new_cart(client), product_id(db_engine))).json()
     cart = await set_address(client, cart)
@@ -247,7 +243,7 @@ async def test_noop_quantity_and_address_keep_quote_and_revision(client, db_engi
         assert session.get(m.FreightQuote, saved["quote"]).status == QuoteStatus.RECEIVED
 
 
-@pytest.mark.parametrize(
+@testrunner.mark.parametrize(
     "field,value",
     [
         ("price_cents", 9999),
@@ -299,7 +295,7 @@ async def test_stale_catalog_on_mutation_requires_reload_and_persists_invalidati
     assert_quote_invalidated(db_engine, saved)
 
 
-@pytest.mark.parametrize(
+@testrunner.mark.parametrize(
     "sku,quantity,status",
     [
         ("DEMO-OUTOFSTOCK", 1, 409),
@@ -331,7 +327,7 @@ async def test_unknown_product_and_item_from_other_cart_are_rejected(client, db_
     assert (await client.get(f"/api/carts/{uuid4()}")).status_code == 404
 
 
-@pytest.mark.parametrize("quantity", [0, -1, 1.5, "1", True, 1001])
+@testrunner.mark.parametrize("quantity", [0, -1, 1.5, "1", True, 1001])
 async def test_invalid_quantity_is_not_coerced(client, db_engine, quantity):
     cart = await new_cart(client)
     response = await add(client, cart, product_id(db_engine), quantity)
@@ -339,7 +335,7 @@ async def test_invalid_quantity_is_not_coerced(client, db_engine, quantity):
     assert (await client.get(f"/api/carts/{cart['id']}")).json() == cart
 
 
-@pytest.mark.parametrize(
+@testrunner.mark.parametrize(
     "field", ["price_cents", "weight_grams", "subtotal_cents", "freight_company_id"]
 )
 async def test_client_cannot_supply_commercial_or_external_context_fields(client, db_engine, field):
@@ -481,7 +477,7 @@ async def test_sufficient_stock_changes_and_unrelated_catalog_changes_keep_quote
         assert session.get(m.FreightQuote, saved["quote"]).status == QuoteStatus.RECEIVED
 
 
-@pytest.mark.parametrize(
+@testrunner.mark.parametrize(
     "address",
     [
         {**ADDRESS, "postal_code": "01001-000"},
@@ -504,7 +500,7 @@ async def test_invalid_destination_does_not_change_cart(client, address):
     assert (await client.get(f"/api/carts/{cart['id']}")).json() == cart
 
 
-@pytest.mark.parametrize("revision", [0, True, "1", 1.5])
+@testrunner.mark.parametrize("revision", [0, True, "1", 1.5])
 async def test_revision_is_required_as_strict_positive_integer(client, db_engine, revision):
     cart = await new_cart(client)
     response = await client.post(

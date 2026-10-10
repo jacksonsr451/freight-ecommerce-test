@@ -1,5 +1,8 @@
 # 17 — Testes end-to-end e evidências
 
+> **Registro histórico pré-prompt 19:** os comandos foram executados com pytest; os atuais usam
+> jsr-testrunner. Veja `docs/development-testing.md`.
+
 Execução final: **10/10/2026** · raiz `E:\Softwares\joao\tests` · Windows/Edge local.
 
 ## Comandos executados

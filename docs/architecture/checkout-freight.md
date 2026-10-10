@@ -1,5 +1,8 @@
 # 10 — Checkout e comparação de fretes
 
+> **Registro histórico pré-prompt 19:** o comando de teste citado abaixo usava pytest. O runner atual
+> é jsr-testrunner; veja `docs/development-testing.md`.
+
 Fonte externa usada: `docs/reference/gestao-frete-integracao-ecommerce-teste.md`, L7–L9, L19–L27,
 L33–L39, L54–L73, L121–L180 e L184–L188. Não foram inferidos campos, endpoint ou permissões externos.
 

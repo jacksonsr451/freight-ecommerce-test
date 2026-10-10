@@ -1,6 +1,6 @@
 # Decisões e riscos — freight-ecommerce-test (Prompt 00)
 
-Registro de decisões (ADR curto) e riscos da preparação inicial. Contrato de referência: `docs/reference/gestao-frete-integracao-ecommerce-teste.md`; matriz em `docs/architecture/contract-matrix.md`; plano em `docs/architecture/execution-plan.md`.
+Registro histórico de decisões (ADR curto) e riscos da preparação inicial. Contrato de referência: `docs/reference/gestao-frete-integracao-ecommerce-teste.md`; matriz em `docs/architecture/contract-matrix.md`; plano em `docs/architecture/execution-plan.md`. A decisão provisória de adoção do framework de testes foi concluída no prompt 19 com jsr-testrunner.
 
 **Estado de revisão:** propostas para revisão pelo usuário. A expressão “aceita” nos registros abaixo indica adoção nesta proposta técnica, não aprovação já concedida pelo usuário. Restrições expressas no prompt (Bearer exclusivo no backend, compra local e bloqueio de contratação automática de `manual_only`) são requisitos obrigatórios.
 

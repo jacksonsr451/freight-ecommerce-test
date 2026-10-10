@@ -1,5 +1,8 @@
 # 04 — API local de catálogo e estoque
 
+> **Registro histórico pré-prompt 19:** comandos pytest abaixo documentam a rodada original; a suíte
+> atual usa jsr-testrunner. Veja `docs/development-testing.md`.
+
 Raiz: `E:\Softwares\joao\tests`. Reutiliza Product/Inventory e a migration 0001;
 nenhuma nova tabela, migration ou integração Packsenvios foi necessária.
 

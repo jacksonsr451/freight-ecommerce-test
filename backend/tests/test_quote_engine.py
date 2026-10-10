@@ -5,7 +5,8 @@ from datetime import timedelta
 from uuid import UUID
 
 import httpx
-import pytest
+import testrunner
+from _testrunner_support import async_fixture
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import event, func, select
 from sqlalchemy.exc import IntegrityError
@@ -22,7 +23,7 @@ from freight_ecommerce.freight.config import FreightSettings
 from freight_ecommerce.freight.synthetic import SYNTHETIC_COMPANY_ID, SyntheticQuoteTransport
 from freight_ecommerce.main import create_app
 
-pytestmark = [pytest.mark.postgres, pytest.mark.anyio]
+_testrunner_mark = [testrunner.mark.postgres]
 ADDRESS = {
     "postal_code": "01001000",
     "street": "Rua sintética",
@@ -34,12 +35,7 @@ ADDRESS = {
 }
 
 
-@pytest.fixture
-def anyio_backend():
-    return "asyncio"
-
-
-@pytest.fixture
+@async_fixture
 async def harness(db_engine):
     with transaction(db_engine) as session:
         seed_demo_catalog(session)
@@ -85,7 +81,7 @@ async def harness(db_engine):
             await client.aclose()
 
 
-@pytest.fixture
+@async_fixture
 async def prepared(harness, db_engine):
     http, calls, provider, app = harness()
     cart = await make_cart(http, db_engine)
@@ -198,7 +194,7 @@ async def test_replay_uses_persisted_response_without_http_or_snapshot_duplicati
     assert read.json() == first and len(calls) == 1
 
 
-@pytest.mark.parametrize("scenario", ["unavailable", "fiscal_review"])
+@testrunner.mark.parametrize("scenario", ["unavailable", "fiscal_review"])
 async def test_no_offer_states_are_persisted_without_price_zero(harness, db_engine, scenario):
     http, calls, _, app = harness(scenario=scenario)
     try:
@@ -439,7 +435,7 @@ async def test_unknown_optional_flags_and_secret_echo_are_not_fabricated_or_publ
         await app.state.freight_client.aclose()
 
 
-@pytest.mark.parametrize(
+@testrunner.mark.parametrize(
     "field", ["weight_kg", "declared_value_cents", "length_cm", "freight_company_id"]
 )
 async def test_browser_cannot_override_commercial_or_context_criteria(prepared, field):
@@ -503,7 +499,7 @@ async def test_reply_transaction_failure_does_not_lose_durable_request(harness, 
         await app.state.freight_client.aclose()
 
 
-@pytest.mark.parametrize("status", [429, 503])
+@testrunner.mark.parametrize("status", [429, 503])
 async def test_retry_after_blocks_early_refresh_and_changed_criteria(harness, db_engine, status):
     async def handler(request, provider):
         return httpx.Response(status, headers={"Retry-After": "60"}, json={"message": "synthetic"})
@@ -559,6 +555,6 @@ async def test_selected_reference_has_database_quote_ownership_constraint(prepar
     with Session(db_engine) as session:
         saved = session.get(m.FreightQuote, UUID(first["quote_reference"]))
         saved.selected_option_snapshot_id = UUID(second["options"][0]["reference"])
-        with pytest.raises(IntegrityError):
+        with testrunner.raises(IntegrityError):
             session.flush()
         session.rollback()

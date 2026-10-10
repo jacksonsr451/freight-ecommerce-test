@@ -1,4 +1,5 @@
-import pytest
+import testrunner
+from _testrunner_support import async_fixture
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -9,7 +10,7 @@ from freight_ecommerce.database import transaction
 from freight_ecommerce.domain import models as m
 from freight_ecommerce.main import create_app
 
-pytestmark = [pytest.mark.postgres, pytest.mark.anyio]
+_testrunner_mark = [testrunner.mark.postgres]
 ADDRESS = {
     "postal_code": "01001000",
     "street": "Rua sintética",
@@ -22,12 +23,7 @@ ADDRESS = {
 BUYER = {"name": "Comprador sintético", "email": "buyer@example.com"}
 
 
-@pytest.fixture
-def anyio_backend():
-    return "asyncio"
-
-
-@pytest.fixture
+@async_fixture
 async def fixture(db_engine):
     with transaction(db_engine) as session:
         seed_demo_catalog(session)
@@ -114,7 +110,7 @@ async def test_buyer_address_saved_atomically_and_address_change_invalidates_sel
         assert all(stock.reserved == 0 for stock in session.scalars(select(m.Inventory)))
 
 
-@pytest.mark.parametrize(
+@testrunner.mark.parametrize(
     "buyer,address,extra",
     [
         ({**BUYER, "email": "invalid"}, ADDRESS, {}),

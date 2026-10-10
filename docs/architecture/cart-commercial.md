@@ -1,5 +1,8 @@
 # 05 — Carrinho persistido e cálculo comercial
 
+> **Registro histórico pré-prompt 19:** comandos pytest e resultados abaixo são da rodada original; a
+> suíte atual usa jsr-testrunner. Veja `docs/development-testing.md`.
+
 Raiz: `E:\Softwares\joao\tests`. Reutiliza Cart/CartItem e os modelos de checkout/cotação.
 Fonte contratual: `docs/reference/gestao-frete-integracao-ecommerce-teste.md`, especialmente
 L184–L188 (catálogo servidor, alteração de critérios, chave nova, snapshots e seleção local).

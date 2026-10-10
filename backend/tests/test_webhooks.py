@@ -4,7 +4,8 @@ import json
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
-import pytest
+import testrunner
+from _testrunner_support import async_fixture
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -13,7 +14,7 @@ from freight_ecommerce.config import Settings
 from freight_ecommerce.domain import models as m
 from freight_ecommerce.main import create_app
 
-pytestmark = [pytest.mark.postgres, pytest.mark.anyio]
+_testrunner_mark = [testrunner.mark.postgres]
 SECRET = "synthetic-independent-webhook-signing-secret"
 ADMIN_KEY = "synthetic-local-admin-key-for-tests-only"
 ADMIN_HEADERS = {"X-Local-Admin-Key": ADMIN_KEY}
@@ -22,12 +23,7 @@ LOCATION = UUID("00000000-0000-4000-8000-000000000003")
 SHIPMENT = "synthetic-native-shipment-001"
 
 
-@pytest.fixture
-def anyio_backend():
-    return "asyncio"
-
-
-@pytest.fixture
+@async_fixture
 async def webhook_app(db_engine):
     settings = Settings(
         _env_file=None,

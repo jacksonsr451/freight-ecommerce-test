@@ -20,18 +20,20 @@ dependencies = [
 packages = [{ include = "freight_ecommerce", from = "src" }]
 
 [tool.poetry.group.dev.dependencies]
-pytest = ">=8,<10"
 ruff = ">=0.11,<1"
+jsr-testrunner = "0.1.0"
 
 [build-system]
 requires = ["poetry-core>=2.0,<3.0"]
 build-backend = "poetry.core.masonry.api"
 
-[tool.pytest.ini_options]
+[tool.testrunner]
 testpaths = ["tests"]
-addopts = "-ra"
-markers = ["postgres: integration tests against a local PostgreSQL database",
-           "browser: real browser with local API and owned PostgreSQL schema"]
+addopts = ["-ra", "--disable-plugin-autoload"]
+markers = [
+    "postgres: integration tests against a local PostgreSQL database",
+    "browser: real browser with local API and owned PostgreSQL schema",
+]
 
 [tool.ruff]
 extend = "../.ruff.toml"

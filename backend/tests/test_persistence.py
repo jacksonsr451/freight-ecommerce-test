@@ -2,7 +2,7 @@ from copy import deepcopy
 from datetime import UTC, datetime, timedelta, timezone
 from uuid import uuid4
 
-import pytest
+import testrunner
 from alembic import command
 from domain_fixtures import make_graph, make_product
 from sqlalchemy import func, inspect, select, text, update
@@ -15,7 +15,7 @@ from freight_ecommerce.domain import models as m
 from freight_ecommerce.domain.base import Base
 from freight_ecommerce.domain.states import CartStatus
 
-pytestmark = pytest.mark.postgres
+_testrunner_mark = testrunner.mark.postgres
 
 
 def test_all_entities_roundtrip_uuid_utc_snapshots_and_distinct_external_ids(session):
@@ -49,7 +49,7 @@ def test_all_entities_roundtrip_uuid_utc_snapshots_and_distinct_external_ids(ses
     assert graph.webhook.payload["synthetic_fixture"] is True
 
 
-@pytest.mark.parametrize(
+@testrunner.mark.parametrize(
     "kind",
     [
         "negative_price",
@@ -85,7 +85,7 @@ def test_database_constraints_and_uniqueness(session, kind):
         ),
     }[kind]()
     session.add(invalid)
-    with pytest.raises(IntegrityError):
+    with testrunner.raises(IntegrityError):
         session.flush()
     session.rollback()
     assert session.get(m.Product, product.id) is not None
@@ -104,7 +104,7 @@ def test_checkout_address_must_belong_to_customer(session):
             cart_revision=1,
         )
     )
-    with pytest.raises(IntegrityError):
+    with testrunner.raises(IntegrityError):
         session.flush()
     session.rollback()
 
@@ -117,7 +117,7 @@ def test_request_key_is_unique_per_local_organization_namespace(session):
         "criteria": deepcopy(graph.quote.criteria),
     }
     session.add(m.FreightQuote(integration_scope=graph.quote.integration_scope, **values))
-    with pytest.raises(IntegrityError):
+    with testrunner.raises(IntegrityError):
         session.flush()
     session.rollback()
     other_scope = m.FreightQuote(integration_scope="another-synthetic-organization", **values)
@@ -159,7 +159,7 @@ def test_option_identity_is_snapshot_and_index_not_rate_table(session):
             payload={"synthetic_fixture": True},
         )
     )
-    with pytest.raises(IntegrityError):
+    with testrunner.raises(IntegrityError):
         session.flush()
     session.rollback()
 
@@ -195,7 +195,7 @@ def test_order_insert_rejects_an_option_from_another_quote(session):
             shipping_address_snapshot={"synthetic_fixture": True},
         )
     )
-    with pytest.raises(IntegrityError):
+    with testrunner.raises(IntegrityError):
         session.flush()
     session.rollback()
 
@@ -212,12 +212,14 @@ def test_import_batch_deduplication_key_is_unique(session):
             deduplication_key=graph.batch.deduplication_key,
         )
     )
-    with pytest.raises(IntegrityError):
+    with testrunner.raises(IntegrityError):
         session.flush()
     session.rollback()
 
 
-@pytest.mark.parametrize("kind", ["price", "quote", "payment", "batch_row", "simulation", "state"])
+@testrunner.mark.parametrize(
+    "kind", ["price", "quote", "payment", "batch_row", "simulation", "state"]
+)
 def test_server_snapshots_and_resource_links_cannot_be_tampered_in_sql(session, kind):
     graph = make_graph(session)
     statement = {
@@ -238,7 +240,7 @@ def test_server_snapshots_and_resource_links_cannot_be_tampered_in_sql(session, 
         .values(simulation=False),
         "state": update(m.Cart).where(m.Cart.id == graph.cart.id).values(status="invented_state"),
     }[kind]
-    with pytest.raises(IntegrityError):
+    with testrunner.raises(IntegrityError):
         session.execute(statement)
     session.rollback()
 
@@ -247,14 +249,14 @@ def test_orm_and_database_protect_immutable_option_and_order_item(session):
     graph = make_graph(session)
     original = deepcopy(graph.option.payload)
     graph.option.price_cents = 1
-    with pytest.raises(m.SnapshotImmutableError):
+    with testrunner.raises(m.SnapshotImmutableError):
         session.flush()
     session.rollback()
     for entity, field, value in [
         (m.FreightOptionSnapshot, "payload", {"synthetic_fixture": True, "tampered": True}),
         (m.OrderItem, "name", "tampered"),
     ]:
-        with pytest.raises(IntegrityError, match="snapshot is immutable"):
+        with testrunner.raises(IntegrityError, match="snapshot is immutable"):
             session.execute(update(entity).values(**{field: value}))
         session.rollback()
     session.expire_all()
@@ -269,14 +271,14 @@ def test_quote_criteria_and_external_identity_cannot_be_replaced(session):
         ("external_quote_request_id", uuid4()),
     ]:
         setattr(graph.quote, field, value)
-        with pytest.raises(m.SnapshotImmutableError):
+        with testrunner.raises(m.SnapshotImmutableError):
             session.flush()
         session.rollback()
 
 
 def test_transaction_rolls_back_stock_and_failed_insert_together(session, db_engine):
     graph = make_graph(session)
-    with pytest.raises(IntegrityError), transaction(db_engine) as tx:
+    with testrunner.raises(IntegrityError), transaction(db_engine) as tx:
         stock = tx.get(m.Inventory, graph.inventory.id)
         stock.reserved = 2
         tx.add(m.CartItem(cart_id=graph.cart.id, product_id=graph.product.id, quantity=0))
@@ -296,7 +298,7 @@ def test_concurrent_state_updates_reject_lost_update(session, db_engine):
         a.transition(CartStatus.CHECKOUT_PENDING)
         first.commit()
         b.transition(CartStatus.ABANDONED)
-        with pytest.raises(StaleDataError):
+        with testrunner.raises(StaleDataError):
             second.commit()
         second.rollback()
     session.expire_all()
@@ -315,7 +317,7 @@ def test_utc_persistence_rejects_naive_timestamp_and_preserves_instant(session):
         occurred_at=datetime(2026, 10, 8, 9),
     )
     session.add(event)
-    with pytest.raises(StatementError, match="timezone-aware"):
+    with testrunner.raises(StatementError, match="timezone-aware"):
         session.flush()
     session.rollback()
     event.occurred_at = datetime(2026, 10, 8, 9, tzinfo=timezone(timedelta(hours=-3)))

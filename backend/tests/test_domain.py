@@ -1,7 +1,7 @@
 from datetime import UTC, datetime, timedelta, timezone
 from io import StringIO
 
-import pytest
+import testrunner
 from alembic import command
 
 from freight_ecommerce.domain.base import UTCDateTime
@@ -27,7 +27,7 @@ from freight_ecommerce.domain.states import (
 )
 
 
-@pytest.mark.parametrize(
+@testrunner.mark.parametrize(
     "entity,target",
     [
         (Cart(), CartStatus.CHECKED_OUT),
@@ -40,24 +40,24 @@ from freight_ecommerce.domain.states import (
     ],
 )
 def test_invalid_local_transitions_are_rejected(entity, target):
-    with pytest.raises(TransitionError, match="Invalid local transition"):
+    with testrunner.raises(TransitionError, match="Invalid local transition"):
         entity.transition(target)
 
 
 def test_direct_assignment_cannot_bypass_graph_and_other_lifecycle_is_rejected():
     cart = Cart()
-    with pytest.raises(TransitionError):
+    with testrunner.raises(TransitionError):
         cart.status = "checked_out"
-    with pytest.raises(TransitionError, match="another lifecycle"):
+    with testrunner.raises(TransitionError, match="another lifecycle"):
         cart.transition(PaymentStatus.PENDING)
     cart.transition(CartStatus.CHECKOUT_PENDING)
     cart.transition(CartStatus.CHECKOUT_PENDING)  # idempotent local operation
     cart.transition(CartStatus.CHECKED_OUT)
-    with pytest.raises(TransitionError):
+    with testrunner.raises(TransitionError):
         cart.transition(CartStatus.ACTIVE)
 
 
-@pytest.mark.parametrize(
+@testrunner.mark.parametrize(
     "flags",
     [
         {"manual_only": True},
@@ -73,20 +73,20 @@ def test_estimates_or_manual_offers_never_enable_automatic_contract(flags):
     )
     for key, value in flags.items():
         setattr(option, key, value)
-    with pytest.raises(ValueError, match="not eligible"):
+    with testrunner.raises(ValueError, match="not eligible"):
         option.require_automatic_contract_eligibility()
     eligible_flags = FreightOptionSnapshot(
         manual_only=False,
         demonstration_only=False,
         weight_only=False,
     )
-    with pytest.raises(NotImplementedError, match="TODO-CONTRACT"):
+    with testrunner.raises(NotImplementedError, match="TODO-CONTRACT"):
         eligible_flags.require_automatic_contract_eligibility()
 
 
 def test_utc_type_rejects_naive_and_canonicalizes_offset():
     type_ = UTCDateTime()
-    with pytest.raises(ValueError, match="timezone-aware"):
+    with testrunner.raises(ValueError, match="timezone-aware"):
         type_.process_bind_param(datetime(2026, 10, 8), None)
     source = datetime(2026, 10, 8, 9, tzinfo=timezone(timedelta(hours=-3)))
     assert type_.process_bind_param(source, None) == datetime(2026, 10, 8, 12, tzinfo=UTC)

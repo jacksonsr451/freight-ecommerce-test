@@ -1,7 +1,8 @@
 from uuid import UUID
 
 import httpx
-import pytest
+import testrunner
+from _testrunner_support import async_fixture
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -19,18 +20,13 @@ from freight_ecommerce.freight.import_validation import (
 )
 from freight_ecommerce.main import create_app
 
-pytestmark = [pytest.mark.postgres, pytest.mark.anyio]
+_testrunner_mark = [testrunner.mark.postgres]
 ADMIN_KEY = "synthetic-local-admin-key-for-tests-only"
 ADMIN_HEADERS = {"X-Local-Admin-Key": ADMIN_KEY}
 COMPANY = UUID("00000000-0000-4000-8000-000000000002")
 LOCATION = UUID("00000000-0000-4000-8000-000000000003")
 BATCH = UUID("00000000-0000-4000-8000-000000000004")
 DISPATCH_CONNECTION = UUID("00000000-0000-4000-8000-000000000005")
-
-
-@pytest.fixture
-def anyio_backend():
-    return "asyncio"
 
 
 def nfe_key():
@@ -106,7 +102,7 @@ def external_summary(status="queued", *, batch_id=BATCH):
     }
 
 
-@pytest.fixture
+@async_fixture
 async def real_shop(db_engine):
     requests: list[httpx.Request] = []
     remote_status = {
@@ -333,7 +329,7 @@ async def test_confirmation_waits_for_validation_and_external_429_is_not_retried
         transport=httpx.MockTransport(throttled),
     )
     try:
-        with pytest.raises(FreightError) as error:
+        with testrunner.raises(FreightError) as error:
             await throttled_client.upload_order_import(
                 "official-orders.csv", synthetic_csv(), "text/csv"
             )
@@ -360,11 +356,11 @@ async def test_invalid_csv_mode_and_export_readiness_never_call_external(real_sh
 
 
 def test_csv_fiscal_validation_xlsx_structure_and_file_size_caps():
-    with pytest.raises(ImportFileError, match="CPF/CNPJ inválido"):
+    with testrunner.raises(ImportFileError, match="CPF/CNPJ inválido"):
         validate_import_file("synthetic.csv", "text/csv", synthetic_csv(valid=False))
-    with pytest.raises(ImportFileError, match="acima do limite"):
+    with testrunner.raises(ImportFileError, match="acima do limite"):
         validate_import_file("synthetic.csv", "text/csv", b"x" * (MAX_FILE_BYTES + 1))
-    with pytest.raises(ImportFileError, match="XLSX inválido"):
+    with testrunner.raises(ImportFileError, match="XLSX inválido"):
         validate_import_file("synthetic.xlsx", MIME_XLSX, b"not a zip workbook")
 
 

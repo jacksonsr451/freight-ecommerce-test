@@ -1,7 +1,8 @@
 import asyncio
 from uuid import UUID, uuid4
 
-import pytest
+import testrunner
+from _testrunner_support import async_fixture
 from alembic import command
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import func, select
@@ -22,7 +23,7 @@ from freight_ecommerce.freight.config import FreightSettings
 from freight_ecommerce.freight.synthetic import SYNTHETIC_COMPANY_ID, SyntheticQuoteTransport
 from freight_ecommerce.main import create_app
 
-pytestmark = [pytest.mark.postgres, pytest.mark.anyio]
+_testrunner_mark = [testrunner.mark.postgres]
 BUYER = {"name": "Comprador local sintético", "email": "order-buyer@example.com"}
 ADDRESS = {
     "postal_code": "01001000",
@@ -38,12 +39,7 @@ ADMIN_KEY = "synthetic-local-admin-key-for-tests-only"
 ADMIN_HEADERS = {"X-Local-Admin-Key": ADMIN_KEY}
 
 
-@pytest.fixture
-def anyio_backend():
-    return "asyncio"
-
-
-@pytest.fixture
+@async_fixture
 async def shop(db_engine):
     with transaction(db_engine) as session:
         seed_demo_catalog(session)
@@ -201,7 +197,7 @@ async def test_idempotency_key_conflict_and_tampered_money_freight_are_rejected(
         assert session.scalar(select(func.count()).select_from(m.StockReservation)) == 0
 
 
-@pytest.mark.parametrize(
+@testrunner.mark.parametrize(
     "outcome,order_status,payment_status,reserved",
     [
         ("pending", "payment_pending", "pending", 0),
@@ -473,7 +469,7 @@ async def test_order_migration_downgrade_refuses_to_drop_live_order_evidence(
         schema = connection.scalar(select(func.current_schema()))
         connection.commit()
         config = alembic_config(connection, schema)
-        with pytest.raises(DBAPIError, match="Downgrade 0005 is blocked"):
+        with testrunner.raises(DBAPIError, match="Downgrade 0005 is blocked"):
             command.downgrade(config, "0004")
         connection.rollback()
     with Session(db_engine) as session:

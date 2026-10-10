@@ -1,10 +1,12 @@
+import inspect
 import os
 import socket
 import subprocess
 from pathlib import Path
 from uuid import uuid4
 
-import pytest
+import testrunner
+from _testrunner_support import async_test_loop  # noqa: F401 - registers shared loop fixture
 from alembic import command
 from alembic.config import Config
 from sqlalchemy import create_engine
@@ -14,7 +16,7 @@ from sqlalchemy.orm import Session
 BACKEND = Path(__file__).resolve().parents[1]
 
 
-@pytest.fixture(autouse=True)
+@testrunner.fixture(autouse=True)
 def isolate_freight_test_environment(request, monkeypatch):
     if request.module.__name__.startswith("test_freight_"):
         for name in tuple(os.environ):
@@ -43,28 +45,31 @@ def migration_config(connection=None, schema=None):
     return config
 
 
-@pytest.fixture(scope="session")
+@testrunner.fixture(scope="session")
 def postgres_url(tmp_path_factory):
     configured = os.environ.get("TEST_DATABASE_URL")
     if configured:
         url = make_url(configured)
-        if url.get_backend_name() != "postgresql" or url.host not in {
+        allowed_hosts = {
             "127.0.0.1",
             "localhost",
             "::1",
-        }:
-            pytest.fail("Persistence tests require an explicit loopback PostgreSQL URL")
+        }
+        if os.environ.get("TESTRUNNER_DOCKER") == "1":
+            allowed_hosts.add("db")
+        if url.get_backend_name() != "postgresql" or url.host not in allowed_hosts:
+            testrunner.fail("Persistence tests require an explicit loopback PostgreSQL URL")
         yield url
         return
     binary_dir = os.environ.get("TEST_POSTGRES_BIN")
     if not binary_dir:
-        pytest.skip("PostgreSQL integration requires TEST_DATABASE_URL or TEST_POSTGRES_BIN")
+        testrunner.skip("PostgreSQL integration requires TEST_DATABASE_URL or TEST_POSTGRES_BIN")
     binary = Path(binary_dir)
     suffix = ".exe" if os.name == "nt" else ""
     initdb = binary / f"initdb{suffix}"
     pg_ctl = binary / f"pg_ctl{suffix}"
     if not initdb.is_file() or not pg_ctl.is_file():
-        pytest.fail("TEST_POSTGRES_BIN must contain initdb and pg_ctl")
+        testrunner.fail("TEST_POSTGRES_BIN must contain initdb and pg_ctl")
     root = tmp_path_factory.mktemp("private-postgres")
     data = root / "data"
     with socket.socket() as sock:
@@ -106,7 +111,7 @@ def postgres_url(tmp_path_factory):
         )
 
 
-@pytest.fixture
+@testrunner.fixture
 def db_engine(postgres_url):
     """Only create/drop an owned random schema; never migrate public or another app's schema."""
     schema = f"freight_test_{uuid4().hex}"
@@ -128,12 +133,28 @@ def db_engine(postgres_url):
         admin.dispose()
 
 
-@pytest.fixture
+@testrunner.fixture
 def session(db_engine):
     with Session(db_engine, expire_on_commit=False) as session:
         yield session
 
 
-@pytest.fixture
+@testrunner.fixture
 def alembic_config():
     return migration_config
+
+
+@testrunner.hookimpl(tryfirst=True)
+def testrunner_pyfunc_call(pyfuncitem):
+    """Run coroutine tests on the same loop used by adapted async fixtures."""
+    function = pyfuncitem.obj
+    if not inspect.iscoroutinefunction(function):
+        return None
+    loop = pyfuncitem.funcargs["async_test_loop"]
+    arguments = {
+        name: pyfuncitem.funcargs[name]
+        for name in inspect.signature(function).parameters
+        if name in pyfuncitem.funcargs
+    }
+    loop.run_until_complete(function(**arguments))
+    return True

@@ -1,4 +1,4 @@
-import pytest
+import testrunner
 from httpx import ASGITransport, AsyncClient
 
 from freight_ecommerce import main
@@ -6,13 +6,7 @@ from freight_ecommerce.config import Settings
 from freight_ecommerce.freight.config import FreightSettings
 
 
-@pytest.fixture
-def anyio_backend():
-    return "asyncio"
-
-
-@pytest.mark.anyio
-@pytest.mark.parametrize("mode", ["mock", "real"])
+@testrunner.mark.parametrize("mode", ["mock", "real"])
 async def test_public_runtime_exposes_only_mode_and_simulation_without_secrets(monkeypatch, mode):
     key = "synthetic-runtime-secret-never-browser"
     config = FreightSettings(
@@ -33,7 +27,6 @@ async def test_public_runtime_exposes_only_mode_and_simulation_without_secrets(m
     app.state.engine.dispose()
 
 
-@pytest.mark.anyio
 async def test_invalid_runtime_configuration_is_safe_error_not_mock_fallback(monkeypatch):
     def invalid():
         raise ValueError("synthetic-private-config-detail")

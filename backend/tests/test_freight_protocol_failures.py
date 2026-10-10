@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock
 from uuid import UUID
 
 import httpx
-import pytest
+import testrunner
 
 from freight_ecommerce.freight.client import PacksenviosClient
 from freight_ecommerce.freight.config import FreightSettings
@@ -13,11 +13,6 @@ from freight_ecommerce.freight.schemas import QuoteRequest
 KEY = "synthetic-protocol-test-secret"
 COMPANY = UUID("00000000-0000-4000-8000-000000000002")
 QUOTE_ID = UUID("00000000-0000-4000-8000-000000000003")
-
-
-@pytest.fixture
-def anyio_backend():
-    return "asyncio"
 
 
 def settings():
@@ -30,7 +25,6 @@ def settings():
     )
 
 
-@pytest.mark.anyio
 async def test_malformed_json_is_not_retried_or_exposed_in_error_logs(caplog):
     calls = []
 
@@ -40,7 +34,7 @@ async def test_malformed_json_is_not_retried_or_exposed_in_error_logs(caplog):
 
     with caplog.at_level(logging.DEBUG):
         async with PacksenviosClient(settings(), transport=httpx.MockTransport(handler)) as client:
-            with pytest.raises(FreightError) as error:
+            with testrunner.raises(FreightError) as error:
                 await client.create_quote(
                     QuoteRequest(
                         request_key=UUID(int=1),
@@ -55,7 +49,6 @@ async def test_malformed_json_is_not_retried_or_exposed_in_error_logs(caplog):
     assert KEY not in caplog.text + str(error.value)
 
 
-@pytest.mark.anyio
 async def test_get_timeout_reuses_uuid_context_and_application_prefix_without_a_body():
     calls = []
 

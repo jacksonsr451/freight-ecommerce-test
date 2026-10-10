@@ -1,4 +1,4 @@
-import pytest
+import testrunner
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import select
 
@@ -8,12 +8,7 @@ from freight_ecommerce.database import transaction
 from freight_ecommerce.domain.models import Inventory, Product
 from freight_ecommerce.main import create_app
 
-pytestmark = [pytest.mark.postgres, pytest.mark.anyio]
-
-
-@pytest.fixture
-def anyio_backend():
-    return "asyncio"
+_testrunner_mark = [testrunner.mark.postgres]
 
 
 async def test_search_filters_total_before_pagination_and_escapes_wildcards(db_engine):
