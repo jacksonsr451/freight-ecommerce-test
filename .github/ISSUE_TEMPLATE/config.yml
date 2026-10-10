@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Support and troubleshooting
+    url: https://github.com/jacksonsr451/freight-ecommerce-test/blob/main/SUPPORT.md
+    about: Read support scope and the local setup/troubleshooting guides.
+  - name: Security reporting policy
+    url: https://github.com/jacksonsr451/freight-ecommerce-test/blob/main/SECURITY.md
+    about: Read the current private reporting-channel status before sharing sensitive details.

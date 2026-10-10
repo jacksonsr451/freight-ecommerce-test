@@ -2,6 +2,8 @@
 name = "freight-ecommerce-backend"
 version = "0.1.0"
 description = "Local simulated ecommerce - FastAPI bootstrap"
+license = "MIT"
+authors = [{ name = "Jackson Severino da Rocha" }]
 requires-python = ">=3.11,<3.15"
 dependencies = [
     "fastapi>=0.115,<1",

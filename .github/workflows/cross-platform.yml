@@ -12,6 +12,8 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest]
     runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
     env:
       TEST_DATABASE_URL: ${{ matrix.os == 'windows-latest' && 'postgresql+psycopg://postgres:root@127.0.0.1:5432/postgres' || 'postgresql+psycopg://postgres:postgres@127.0.0.1:5432/postgres' }}
       PLAYWRIGHT_BROWSER_CHANNEL: ${{ matrix.os == 'windows-latest' && 'msedge' || 'chromium' }}
@@ -20,10 +22,10 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: "3.11"
       - uses: actions/setup-node@v4
         with:
-          node-version: '24.15.0'
+          node-version: "24.15.0"
           cache: npm
           cache-dependency-path: frontend/package-lock.json
       - name: Start PostgreSQL on Linux runner
@@ -57,6 +59,14 @@ jobs:
         run: python -m pip install poetry==2.4.0
       - name: Install project dependencies
         run: python scripts/dev.py setup
+      - name: Audit Python dependencies
+        if: runner.os == 'Linux'
+        uses: pypa/gh-action-pip-audit@v1.1.0
+        with:
+          virtual-environment: backend/.venv
+      - name: Audit npm dependencies
+        if: runner.os == 'Linux'
+        run: npm --prefix frontend audit --audit-level=high
       - name: Verify jsr-testrunner version
         run: poetry -C backend run testrunner --version
       - name: Install Chromium for Playwright
@@ -77,3 +87,16 @@ jobs:
         if: always() && runner.os == 'Linux'
         shell: bash
         run: docker rm -f ci-postgres || true
+
+  dependency-review:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Review dependency changes for known vulnerabilities
+        uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: high

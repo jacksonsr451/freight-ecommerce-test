@@ -1,5 +1,9 @@
 # freight-ecommerce-test
 
+Aplicação demonstrativa local de catálogo, carrinho e cotação de frete usando React/TypeScript,
+FastAPI e PostgreSQL. **Pedidos e pagamentos são simulados**; comportamento de provedor só é afirmado
+quando sustentado pela fonte contratual e evidência de homologação.
+
 **Raiz do repositório:** o diretório que contém este README, `docker-compose.yml`, `backend/` e
 `frontend/`. Backend, frontend, testes, documentação e infraestrutura ficam nesta raiz, sem diretório
 de projeto intermediário. Os comandos do projeto localizam a raiz a partir do script, não do cwd.
@@ -21,6 +25,21 @@ O ponto de entrada multiplataforma é `python scripts/dev.py <task>`. `scripts/d
 - `docs/checklist-go-no-go.md`
 - `docs/architecture/compatibility-evidence-prompt18.md`
 - `docs/development-testing.md`
+- `docs/development/README.md`
+- `docs/testing/README.md`
+- `docs/deployment/demo.md`
+- `docs/security/README.md`
+- `docs/troubleshooting/README.md`
+- `ARCHITECTURE.md`
+- `ROADMAP.md`
+- `CHANGELOG.md`
+- `CONTRIBUTING.md`
+- `CONTRIBUTORS.md`
+- `CODE_OF_CONDUCT.md`
+- `SECURITY.md`
+- `SUPPORT.md`
+- `LICENSE`
+- `THIRD_PARTY_NOTICES.md`
 
 ## Pré-requisitos e instalação (Windows e Linux)
 
@@ -409,18 +428,31 @@ evidência local de idempotência/compensação inadvertidamente. Só em schema 
 
 ```text
 .
+├── .github/          # CI, dependency updates, issue/PR templates
 ├── backend/          # Poetry, FastAPI, Pydantic, jsr-testrunner
 ├── frontend/         # React, TypeScript, Vite, Vitest
 ├── tests/            # Smoke HTTP e conferência contratual
-├── docs/reference/   # Documento original
-├── docs/architecture/
+├── docs/             # arquitetura, desenvolvimento, testes, implantação, contrato e ADRs
 ├── infra/            # Dockerfiles e notas
 ├── scripts/dev.py    # ponto de entrada multiplataforma
 ├── scripts/dev.ps1   # wrapper PowerShell
 ├── scripts/dev.sh    # wrapper Bash
+├── LICENSE           # MIT
+├── ARCHITECTURE.md
+├── CONTRIBUTING.md
+├── SECURITY.md
+├── SUPPORT.md
+├── THIRD_PARTY_NOTICES.md
 ├── .env.example
 ├── .gitignore
 └── docker-compose.yml
 ```
 
 Evidências de execução e limitações: `docs/architecture/bootstrap-current-root.md`.
+
+## Contribuição e licença
+
+Leia `CONTRIBUTING.md` antes de abrir pull requests e `SECURITY.md` antes de reportar questões sensíveis.
+Os contribuidores identificados pelo histórico Git estão em `CONTRIBUTORS.md`. O código do projeto é
+distribuído sob a licença [MIT](LICENSE). A licença não concede direitos sobre a API, marcas, serviços
+ou contrato de Packsenvios; veja `THIRD_PARTY_NOTICES.md`.

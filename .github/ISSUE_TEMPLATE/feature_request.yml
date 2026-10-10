@@ -1,0 +1,47 @@
+name: Feature request
+description: Propose a scoped improvement to the local demonstration.
+title: "feature: "
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: "Do not request or imply undocumented Packsenvios behavior. Provider changes must cite the versioned contract and authorization requirements."
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or user need
+      description: Describe the current limitation, not only a preferred implementation.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: Distinguish local simulation from real external behavior.
+    validations:
+      required: true
+  - type: textarea
+    id: contract
+    attributes:
+      label: Contract reference, if relevant
+      description: Exact section/lines from docs/reference/gestao-frete-integracao-ecommerce-teste.md; write N/A for unrelated work.
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Affected platform
+      multiple: true
+      options:
+        - Windows 10/11
+        - Linux
+        - Docker Compose
+        - Platform-independent
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives and acceptance criteria
+    validations:
+      required: false

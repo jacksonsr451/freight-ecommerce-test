@@ -3,8 +3,13 @@
 .env.*
 !.env.example
 !.env.*.example
+.envrc
+.secrets/
+secrets/
 *.pem
 *.key
+*.p12
+*.pfx
 
 # Python / Poetry
 .venv/
@@ -13,8 +18,15 @@ __pycache__/
 .testrunner_cache/
 .ruff_cache/
 .coverage
+.coverage.*
+coverage.xml
 htmlcov/
 *.egg-info/
+.mypy_cache/
+.pyright/
+.tox/
+.nox/
+build/
 
 # Frontend / reports
 node_modules/
@@ -22,6 +34,7 @@ dist/
 coverage/
 playwright-report/
 test-results/
+**/.vite/
 *.tsbuildinfo
 
 # Local tooling

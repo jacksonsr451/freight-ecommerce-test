@@ -1,0 +1,24 @@
+minimum_pre_commit_version: "3.5.0"
+repos:
+  - repo: local
+    hooks:
+      - id: ruff-check
+        name: Ruff lint (backend)
+        entry: poetry -C backend run ruff check .
+        language: system
+        pass_filenames: false
+      - id: ruff-format-check
+        name: Ruff format check (backend)
+        entry: poetry -C backend run ruff format --check .
+        language: system
+        pass_filenames: false
+      - id: eslint
+        name: ESLint (frontend)
+        entry: npm --prefix frontend run lint
+        language: system
+        pass_filenames: false
+      - id: prettier-check
+        name: Prettier check (frontend)
+        entry: npm --prefix frontend run format:check
+        language: system
+        pass_filenames: false
