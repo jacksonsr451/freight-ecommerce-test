@@ -1,5 +1,6 @@
 from pathlib import Path
 from typing import Literal
+from uuid import UUID
 
 from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -24,6 +25,14 @@ class Settings(BaseSettings):
         validation_alias="DATABASE_URL",
     )
     local_admin_key: SecretStr = Field(default="", validation_alias="LOCAL_ADMIN_KEY")
+    packsenvios_webhook_secret: SecretStr = Field(
+        default="", validation_alias="PACKSENVIOS_WEBHOOK_SECRET", repr=False
+    )
+    webhook_timestamp_format: Literal["unix_seconds"] | None = Field(
+        default=None, validation_alias="PACKSENVIOS_WEBHOOK_TIMESTAMP_FORMAT"
+    )
+    webhook_company_id: UUID | None = Field(default=None, validation_alias="FREIGHT_COMPANY_ID")
+    webhook_location_id: UUID | None = Field(default=None, validation_alias="FREIGHT_LOCATION_ID")
 
     @field_validator("local_admin_key")
     @classmethod

@@ -452,6 +452,50 @@ class TrackingEvent(Record, Base):
     payload: Mapped[dict[str, Any]] = mapped_column(JSONB)
 
 
+class WebhookReceipt(Record, Base):
+    """Durable HMAC-verified webhook signal awaiting authorized reconciliation."""
+
+    __tablename__ = "webhook_receipts"
+    __table_args__ = (
+        CheckConstraint("char_length(body_sha256) = 64", name="body_hash_length"),
+        CheckConstraint(
+            "reconciliation_status IN ('reconciliation_pending', 'reconciled')",
+            name="reconciliation_status_values",
+        ),
+        CheckConstraint(
+            "worker_status IN ('not_configured', 'notified', 'unavailable')",
+            name="worker_status_values",
+        ),
+        CheckConstraint("jsonb_typeof(payload) = 'object'", name="payload_object"),
+        UniqueConstraint("event_id", name="uq_webhook_receipts_event_id"),
+        Index(
+            "ix_webhook_receipts_company_shipment_occurred",
+            "company_id",
+            "location_id",
+            "shipment_id",
+            "occurred_at",
+        ),
+    )
+    event_id: Mapped[str] = mapped_column(Text)
+    delivery_id: Mapped[str | None] = mapped_column(Text)
+    event_type: Mapped[str] = mapped_column(String(80))
+    occurred_at: Mapped[datetime] = mapped_column(UTCDateTime())
+    company_id: Mapped[UUID] = mapped_column()
+    location_id: Mapped[UUID | None] = mapped_column()
+    shipment_id: Mapped[str | None] = mapped_column(Text)
+    public_code: Mapped[str | None] = mapped_column(Text)
+    dispatch_status: Mapped[str | None] = mapped_column(Text)
+    body_sha256: Mapped[str] = mapped_column(String(64))
+    out_of_order: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
+    reconciliation_status: Mapped[str] = mapped_column(
+        String(32), default="reconciliation_pending", server_default="reconciliation_pending"
+    )
+    worker_status: Mapped[str] = mapped_column(
+        String(20), default="not_configured", server_default="not_configured"
+    )
+    payload: Mapped[dict[str, Any]] = mapped_column(JSONB)
+
+
 class IntegrationAudit(Record, Base):
     __tablename__ = "integration_audits"
     __table_args__ = (

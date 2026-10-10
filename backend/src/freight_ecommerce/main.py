@@ -19,6 +19,8 @@ from freight_ecommerce.freight.import_router import router as imports_router
 from freight_ecommerce.orders.router import admin_router as admin_orders_router
 from freight_ecommerce.orders.router import router as orders_router
 from freight_ecommerce.quoting.router import router as quoting_router
+from freight_ecommerce.webhooks.router import admin as admin_webhooks_router
+from freight_ecommerce.webhooks.router import receiver as webhooks_router
 
 
 class HealthResponse(BaseModel):
@@ -61,6 +63,7 @@ def create_app(
     app.state.engine = engine
     app.state.freight_client = freight_client
     app.state.freight_client_lock = asyncio.Lock()
+    app.state.webhook_reconciliation_notifier = None
 
     @app.exception_handler(IntegrityError)
     @app.exception_handler(StaleDataError)
@@ -96,6 +99,8 @@ def create_app(
     app.include_router(orders_router)
     app.include_router(admin_orders_router)
     app.include_router(imports_router)
+    app.include_router(webhooks_router)
+    app.include_router(admin_webhooks_router)
 
     @app.get("/api/health", response_model=HealthResponse, tags=["health"])
     def health() -> HealthResponse:

@@ -48,6 +48,7 @@ async def test_admin_is_restricted_even_without_running_database(environment, ke
                 "GET",
                 "/api/admin/imports/00000000-0000-4000-8000-000000000001/rows/3/tracking",
             ),
+            ("GET", "/api/admin/webhooks/receipts"),
             (
                 "POST",
                 "/api/admin/imports/00000000-0000-4000-8000-000000000001/rows/3/tracking",
@@ -62,7 +63,9 @@ async def test_admin_is_restricted_even_without_running_database(environment, ke
 @pytest.mark.anyio
 async def test_internal_openapi_documents_only_local_admin_key_not_external_secret(monkeypatch):
     external_secret = "synthetic-external-freight-secret-never-public"
+    webhook_secret = "synthetic-independent-webhook-signing-secret-never-public"
     monkeypatch.setenv("FREIGHT_API_KEY", external_secret)
+    monkeypatch.setenv("PACKSENVIOS_WEBHOOK_SECRET", webhook_secret)
     app = create_app(Settings(_env_file=None, environment="test", LOCAL_ADMIN_KEY=ADMIN_KEY))
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         response = await client.get("/openapi.json")
@@ -87,6 +90,10 @@ async def test_internal_openapi_documents_only_local_admin_key_not_external_secr
         assert schema["paths"]["/api/admin/imports/{batch_id}/rows/{row}/tracking"]["post"][
             "security"
         ] == [{"LocalAdminKey": []}]
+        assert not schema["paths"]["/api/webhooks/packsenvios"]["post"].get("security")
+        assert schema["paths"]["/api/admin/webhooks/receipts"]["get"]["security"] == [
+            {"LocalAdminKey": []}
+        ]
         assert (
             schema["components"]["securitySchemes"]["LocalAdminKey"]["name"] == "X-Local-Admin-Key"
         )
@@ -104,7 +111,11 @@ async def test_internal_openapi_documents_only_local_admin_key_not_external_secr
             schema["components"]["schemas"]["ProductPatch"]["properties"]["price_cents"]["type"]
             == "integer"
         )
-        assert ADMIN_KEY not in response.text and external_secret not in response.text
+        assert (
+            ADMIN_KEY not in response.text
+            and external_secret not in response.text
+            and webhook_secret not in response.text
+        )
     app.state.engine.dispose()
 
 
