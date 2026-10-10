@@ -56,7 +56,7 @@ their own licenses (MIT for the `actions/*` and dependency-review actions; Apach
 
 ## Docker images
 
-The Dockerfiles use `python:3.11-slim`, `node:24-alpine`, and Compose uses `postgres:17-alpine`. These
+The Dockerfiles use `python:3.11-slim`, `node:24-alpine`, and Compose uses `postgres:17.11-alpine`. These
 images contain operating-system packages in addition to Python/Node/PostgreSQL; retain the upstream
 image package/license notices when redistributing a built image. Tags are not digest-pinned, and no
 container SBOM/license scan was available during this audit. The project does not republish those base
