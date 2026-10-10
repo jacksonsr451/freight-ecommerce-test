@@ -103,7 +103,7 @@ usa apenas dependências `main`.
 
 | Plataforma/ambiente | Resultado |
 |---|---|
-| Windows 10/11 | `python scripts/dev.py check`: 280/280 PASS (inclui browser Edge), 54/54 Vitest, Ruff/ESLint/Prettier, typecheck/build e matriz contratual. |
+| Windows 10/11 | `python scripts/dev.py test`: 280/280 PASS (inclui browser Edge) + 54/54 Vitest. `check` também passou com Ruff/ESLint/Prettier, typecheck/build e matriz contratual. |
 | Linux host | Não executado neste workspace; falta Poetry e Node Linux no WSL2. |
 | Compose Linux | `python scripts/dev.py compose-test`: 279 PASS, 1 SKIP browser (Node/Playwright ausentes dentro da imagem de teste), status 0 e cleanup do projeto/volume confirmados. |
 | GitHub Actions matriz Linux/Windows | Workflow atualizado para matrix; resultado pendente de execução do CI. |

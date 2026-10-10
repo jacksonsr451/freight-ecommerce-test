@@ -104,4 +104,4 @@ Registro histórico de decisões (ADR curto) e riscos da preparação inicial. C
 | TODO(webhook): homologação externa com destino HTTPS público antes de afirmar recebimento | 15/18 |
 | TODO-IMPORT-TEMPLATE: obter grafia literal dos 28 cabeçalhos do modelo oficial antes de certificar exportação compatível | 13 |
 | TODO-SCHEMA-DETAIL: confirmar estruturas aninhadas e respostas incompletas no guia sem inventar campos ou grants | 06/13/14/17 |
-| TODO(bootstrap): definir raiz definitiva do monorepo e revisar adoção de pytest, condicionada no prompt 01 | 01 |
+| Concluído no prompt 19: framework atual da suíte Python é jsr-testrunner; ver `docs/development-testing.md` | 19 |
