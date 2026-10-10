@@ -8,6 +8,7 @@ import OrdersPage from './pages/OrdersPage';
 import OrderPage from './pages/OrderPage';
 import NotFoundPage from './pages/NotFoundPage';
 import ProductPage from './pages/ProductPage';
+import AdminOrdersPage from './pages/AdminOrdersPage';
 
 export default function App() {
   return (
@@ -20,6 +21,7 @@ export default function App() {
         <Route path="checkout" element={<CheckoutPage />} />
         <Route path="pedidos" element={<OrdersPage />} />
         <Route path="pedidos/:orderId" element={<OrderPage />} />
+        <Route path="admin/pedidos" element={<AdminOrdersPage />} />
         <Route path="diagnostico" element={<DiagnosticsPage />} />
         <Route path="*" element={<NotFoundPage />} />
       </Route>

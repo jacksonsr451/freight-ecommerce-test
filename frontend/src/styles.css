@@ -1285,3 +1285,132 @@ dd {
     padding: 22px;
   }
 }
+
+.admin-access {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 24px;
+}
+.admin-access label,
+.admin-filters label {
+  font-size: 13px;
+  font-weight: 700;
+}
+.admin-access input,
+.admin-filters select {
+  width: 100%;
+  min-height: 44px;
+  padding: 9px 12px;
+  border: 1px solid #bfc9c2;
+  border-radius: 8px;
+  background: white;
+  color: var(--ink);
+  font: inherit;
+}
+.admin-access p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+.admin-orders-layout {
+  display: grid;
+  grid-template-columns: minmax(260px, 0.8fr) minmax(0, 1.5fr);
+  gap: 22px;
+  align-items: start;
+}
+.admin-order-queue,
+.admin-order-detail {
+  min-width: 0;
+}
+.admin-filters {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+.admin-filters label {
+  display: grid;
+  gap: 5px;
+}
+.admin-order-list {
+  display: grid;
+  gap: 8px;
+}
+.admin-order-row {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  min-width: 0;
+  padding: 13px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+.admin-order-row.selected {
+  border-color: var(--accent);
+  background: #eef5e9;
+}
+.admin-order-row span,
+.admin-timeline li > span {
+  color: var(--muted);
+  font-size: 12px;
+}
+.admin-order-detail {
+  display: grid;
+  gap: 18px;
+}
+.admin-status-grid {
+  display: grid;
+  grid-template-columns: minmax(110px, 0.7fr) minmax(0, 1.3fr);
+  gap: 7px 14px;
+  overflow-wrap: anywhere;
+}
+.admin-status-grid dt {
+  color: var(--muted);
+}
+.admin-status-grid dd {
+  margin: 0;
+  font-weight: 650;
+}
+.admin-transition-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+  align-items: center;
+  margin-top: 16px;
+}
+.admin-transition-actions p {
+  width: 100%;
+  margin-bottom: 0;
+  font-weight: 700;
+}
+.admin-snapshots pre,
+.admin-timeline pre {
+  max-width: 100%;
+  overflow: auto;
+  padding: 12px;
+  border-radius: 8px;
+  background: #f1f2ed;
+  font-size: 11px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.admin-timeline ol {
+  display: grid;
+  gap: 16px;
+  padding-left: 20px;
+}
+.admin-timeline li > * {
+  display: block;
+  margin-bottom: 5px;
+}
+.admin-timeline details {
+  margin-top: 8px;
+}
+@media (max-width: 760px) {
+  .admin-orders-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

@@ -36,6 +36,9 @@ async def test_admin_is_restricted_even_without_running_database(environment, ke
             ("POST", "/api/admin/products"),
             ("PATCH", "/api/admin/products/00000000-0000-4000-8000-000000000001"),
             ("DELETE", "/api/admin/products/00000000-0000-4000-8000-000000000001"),
+            ("GET", "/api/admin/orders"),
+            ("GET", "/api/admin/orders/00000000-0000-4000-8000-000000000001"),
+            ("POST", "/api/admin/orders/00000000-0000-4000-8000-000000000001/fulfillment"),
         ]:
             response = await client.request(method, path, headers=headers)
             assert response.status_code == status
@@ -54,6 +57,10 @@ async def test_internal_openapi_documents_only_local_admin_key_not_external_secr
         schema = response.json()
         assert not schema["paths"]["/api/products"]["get"].get("security")
         assert schema["paths"]["/api/admin/products"]["post"]["security"] == [{"LocalAdminKey": []}]
+        assert schema["paths"]["/api/admin/orders"]["get"]["security"] == [{"LocalAdminKey": []}]
+        assert schema["paths"]["/api/admin/orders/{order_id}/fulfillment"]["post"]["security"] == [
+            {"LocalAdminKey": []}
+        ]
         assert (
             schema["components"]["securitySchemes"]["LocalAdminKey"]["name"] == "X-Local-Admin-Key"
         )

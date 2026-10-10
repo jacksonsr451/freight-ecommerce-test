@@ -117,7 +117,10 @@ TRANSITIONS = {
             FulfillmentStatus.CANCELLED,
         },
         FulfillmentStatus.READY_FOR_IMPORT: {FulfillmentStatus.IMPORT_PENDING},
-        FulfillmentStatus.IMPORT_PENDING: {FulfillmentStatus.READY_FOR_IMPORT},
+        FulfillmentStatus.IMPORT_PENDING: {
+            FulfillmentStatus.READY_FOR_IMPORT,
+            FulfillmentStatus.SHIPPED_SIMULATED,
+        },
         FulfillmentStatus.SHIPPED_SIMULATED: {FulfillmentStatus.DELIVERED_SIMULATED},
     },
     ImportStatus: {

@@ -24,6 +24,7 @@ from freight_ecommerce.domain.models import (
     OrderItem,
     PaymentSimulation,
     Product,
+    ShipmentImportBatch,
     StockReservation,
     TrackingEvent,
 )
@@ -37,6 +38,10 @@ from freight_ecommerce.domain.states import (
 )
 from freight_ecommerce.freight.client import PacksenviosClient
 from freight_ecommerce.orders.schemas import (
+    AdminFulfillmentTransition,
+    AdminOrderDetail,
+    AdminOrderList,
+    AdminTimelineEvent,
     CancelOrder,
     ConfirmPaymentSimulation,
     CreateOrder,
@@ -581,3 +586,176 @@ def list_orders(session: Session, cart_id: UUID, page: int, page_size: int) -> O
         .limit(page_size)
     ).all()
     return OrderList(items=[view(session, order) for order in orders], total=total)
+
+
+def admin_list_orders(
+    session: Session,
+    page: int,
+    page_size: int,
+    order_status: OrderStatus | None = None,
+    fulfillment_status: FulfillmentStatus | None = None,
+) -> AdminOrderList:
+    statement = select(Order).outerjoin(Fulfillment, Fulfillment.order_id == Order.id)
+    if order_status is not None:
+        statement = statement.where(Order.status == order_status)
+    if fulfillment_status is not None:
+        statement = statement.where(Fulfillment.status == fulfillment_status)
+    total = session.scalar(select(func.count()).select_from(statement.subquery())) or 0
+    orders = session.scalars(
+        statement.order_by(Order.created_at.desc(), Order.id)
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+    ).all()
+    return AdminOrderList(items=[view(session, order) for order in orders], total=total)
+
+
+def admin_order_detail(session: Session, order_id: UUID) -> AdminOrderDetail:
+    order = session.get(Order, order_id)
+    if order is None:
+        fail(404, "order_not_found", "Pedido local não encontrado.")
+    fulfillment = session.scalar(select(Fulfillment).where(Fulfillment.order_id == order.id))
+    option = session.get(FreightOptionSnapshot, order.freight_option_snapshot_id)
+    attempt = session.get(CheckoutAttempt, order.checkout_attempt_id)
+    import_batch = (
+        session.get(ShipmentImportBatch, fulfillment.import_batch_id)
+        if fulfillment is not None and fulfillment.import_batch_id is not None
+        else None
+    )
+    events: list[AdminTimelineEvent] = []
+    if fulfillment is not None:
+        for event in session.scalars(
+            select(TrackingEvent)
+            .where(TrackingEvent.fulfillment_id == fulfillment.id)
+            .order_by(TrackingEvent.occurred_at, TrackingEvent.id)
+        ):
+            events.append(
+                AdminTimelineEvent(
+                    id=event.id,
+                    occurred_at=event.occurred_at,
+                    source=event.source,
+                    event_key=event.event_key,
+                    title=event.title,
+                    internal_status=event.status if event.source == "simulated" else None,
+                    external_status=event.status if event.source == "packsenvios" else None,
+                    snapshot=event.payload,
+                )
+            )
+    for audit in session.scalars(
+        select(IntegrationAudit)
+        .where(IntegrationAudit.checkout_attempt_id == attempt.id)
+        .order_by(IntegrationAudit.created_at, IntegrationAudit.id)
+    ):
+        if not audit.operation.startswith(("local_order_", "local_payment_", "admin_fulfillment_")):
+            continue
+        is_admin = audit.operation.startswith("admin_fulfillment_")
+        events.append(
+            AdminTimelineEvent(
+                id=audit.id,
+                occurred_at=audit.created_at,
+                source="local_admin" if is_admin else "local_store",
+                event_key=audit.operation,
+                title=audit.operation.replace("_", " "),
+                internal_status=audit.details.get("to_status"),
+                external_status=None,
+                snapshot=audit.details,
+            )
+        )
+    events.sort(key=lambda event: (event.occurred_at, str(event.id)))
+    return AdminOrderDetail(
+        order=view(session, order),
+        snapshots={
+            "shipping_address": order.shipping_address_snapshot,
+            "freight_option": {
+                "reference": str(option.id),
+                "price_cents": option.price_cents,
+                "carrier_name": option.carrier_name,
+                "manual_only": option.manual_only,
+                "demonstration_only": option.demonstration_only,
+                "payload": option.payload,
+            },
+            "products": [line.product_snapshot for line in view(session, order).items],
+        },
+        internal_fulfillment_status=fulfillment.status if fulfillment else None,
+        external_status=import_batch.external_status if import_batch is not None else None,
+        timeline=events,
+    )
+
+
+def admin_transition_fulfillment(
+    session: Session, order_id: UUID, command: AdminFulfillmentTransition
+) -> AdminOrderDetail:
+    order = session.scalar(
+        select(Order)
+        .where(Order.id == order_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    if order is None:
+        fail(404, "order_not_found", "Pedido local não encontrado.")
+    if order.status != OrderStatus.PAID_SIMULATED:
+        fail(
+            409,
+            "order_not_operational",
+            "Somente pedido pago simulado pode avançar no fulfillment.",
+        )
+    fulfillment = session.scalar(
+        select(Fulfillment)
+        .where(Fulfillment.order_id == order.id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    if fulfillment is None:
+        fail(409, "fulfillment_not_started", "Pedido ainda não possui fulfillment local.")
+    if fulfillment.status != command.expected_status:
+        fail(409, "fulfillment_status_conflict", "O estado mudou. Atualize os detalhes do pedido.")
+    target = FulfillmentStatus(command.status)
+    try:
+        fulfillment.transition(target)
+    except ValueError:
+        fail(
+            409,
+            "fulfillment_transition_invalid",
+            "Transição de fulfillment incompatível com o estado atual.",
+        )
+    attempt = session.get(CheckoutAttempt, order.checkout_attempt_id)
+    correlation = uuid4()
+    snapshot = {
+        "simulation": True,
+        "internal_status": target.value,
+        "external_status": None,
+        "source": "local_admin",
+        "order_id": str(order.id),
+    }
+    session.add(
+        TrackingEvent(
+            fulfillment_id=fulfillment.id,
+            source="simulated",
+            event_key=f"admin-{target.value}-{uuid4()}",
+            status=target.value,
+            title=f"Etapa local atualizada: {target.value.replace('_', ' ')}",
+            description="Atualização administrativa local; sem chamada a serviço externo.",
+            occurred_at=utcnow(),
+            payload=snapshot,
+        )
+    )
+    session.add(
+        IntegrationAudit(
+            correlation_id=correlation,
+            checkout_attempt_id=attempt.id,
+            quote_id=order.freight_quote_id,
+            operation="admin_fulfillment_transition",
+            mode="mock",
+            outcome="succeeded",
+            details={
+                "simulation": True,
+                "from_status": command.expected_status.value,
+                "to_status": target.value,
+                "external_status": None,
+                "source": "local_admin",
+            },
+        )
+    )
+    session.flush()
+    result = admin_order_detail(session, order.id)
+    session.commit()
+    return result

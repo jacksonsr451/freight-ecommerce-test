@@ -3,10 +3,14 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, Response
 
-from freight_ecommerce.catalog.router import SessionDep, errors
+from freight_ecommerce.catalog.router import SessionDep, errors, require_local_admin
+from freight_ecommerce.domain.states import FulfillmentStatus, OrderStatus
 from freight_ecommerce.freight.client import PacksenviosClient
 from freight_ecommerce.orders import service
 from freight_ecommerce.orders.schemas import (
+    AdminFulfillmentTransition,
+    AdminOrderDetail,
+    AdminOrderList,
     CancelOrder,
     ConfirmPaymentSimulation,
     CreateOrder,
@@ -19,6 +23,16 @@ ClientDep = Annotated[PacksenviosClient, Depends(get_client)]
 router = APIRouter(prefix="/api", tags=["local-orders"], responses=errors)
 Page = Annotated[int, Query(ge=1, le=1_000_000)]
 PageSize = Annotated[int, Query(ge=1, le=100)]
+admin_router = APIRouter(
+    prefix="/api/admin/orders",
+    tags=["local-admin"],
+    dependencies=[Depends(require_local_admin)],
+    responses={
+        **errors,
+        401: {"description": "Credencial administrativa local inválida."},
+        403: {"description": "Administração local desabilitada."},
+    },
+)
 
 
 @router.post(
@@ -54,3 +68,27 @@ def detail(order_id: UUID, session: SessionDep):
 @router.get("/carts/{cart_id}/orders", response_model=OrderList)
 def history(cart_id: UUID, session: SessionDep, page: Page = 1, page_size: PageSize = 20):
     return service.list_orders(session, cart_id, page, page_size)
+
+
+@admin_router.get("", response_model=AdminOrderList)
+def admin_list(
+    session: SessionDep,
+    page: Page = 1,
+    page_size: PageSize = 20,
+    order_status: OrderStatus | None = None,
+    fulfillment_status: FulfillmentStatus | None = None,
+):
+    return service.admin_list_orders(session, page, page_size, order_status, fulfillment_status)
+
+
+@admin_router.get("/{order_id}", response_model=AdminOrderDetail)
+def admin_detail(order_id: UUID, session: SessionDep):
+    return service.admin_order_detail(session, order_id)
+
+
+@admin_router.post("/{order_id}/fulfillment", response_model=AdminOrderDetail)
+def admin_fulfillment_transition(
+    order_id: UUID, data: AdminFulfillmentTransition, session: SessionDep
+):
+    """Update local simulated fulfillment only; never calls Packsenvios."""
+    return service.admin_transition_fulfillment(session, order_id, data)

@@ -34,6 +34,8 @@ ADDRESS = {
     "state": "SP",
     "country": "BR",
 }
+ADMIN_KEY = "synthetic-local-admin-key-for-tests-only"
+ADMIN_HEADERS = {"X-Local-Admin-Key": ADMIN_KEY}
 
 
 @pytest.fixture
@@ -57,7 +59,13 @@ async def shop(db_engine):
         transport=provider,
     )
     app = create_app(
-        Settings(_env_file=None, environment="test"), engine=db_engine, freight_client=client
+        Settings(
+            _env_file=None,
+            environment="test",
+            LOCAL_ADMIN_KEY=ADMIN_KEY,
+        ),
+        engine=db_engine,
+        freight_client=client,
     )
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://shop.test") as http:
         yield http, db_engine, provider
@@ -471,3 +479,89 @@ async def test_order_migration_downgrade_refuses_to_drop_live_order_evidence(
     with Session(db_engine) as session:
         assert session.get(m.Order, UUID(order["id"])) is not None
         assert session.scalar(select(func.count()).select_from(m.PaymentSimulation)) == 1
+
+
+async def test_admin_fulfillment_transitions_are_local_audited_and_filterable(shop):
+    http, db, provider = shop
+    cart, _ = await setup_quote(http, db)
+    order = (await create_order(http, cart)).json()
+    pending = await http.get("/api/admin/orders", headers=ADMIN_HEADERS)
+    assert pending.status_code == 200 and pending.json()["total"] == 1
+    assert pending.json()["items"][0]["id"] == order["id"]
+    premature = await http.post(
+        f"/api/admin/orders/{order['id']}/fulfillment",
+        headers=ADMIN_HEADERS,
+        json={"expected_status": "pago_simulado", "status": "separando"},
+    )
+    assert premature.status_code == 409
+
+    order = (await confirm(http, order, "approved")).json()
+    stages = [
+        "separando",
+        "embalado",
+        "pronto_para_importacao",
+        "importacao_pendente",
+        "expedido_simulado",
+        "entregue_simulado",
+    ]
+    current = "pago_simulado"
+    for target in stages:
+        response = await http.post(
+            f"/api/admin/orders/{order['id']}/fulfillment",
+            headers=ADMIN_HEADERS,
+            json={"expected_status": current, "status": target},
+        )
+        assert response.status_code == 200, response.text
+        detail = response.json()
+        assert detail["internal_fulfillment_status"] == target
+        assert detail["external_status"] is None
+        assert detail["order"]["fulfillment"]["status"] == target
+        current = target
+
+    detail = await http.get(f"/api/admin/orders/{order['id']}", headers=ADMIN_HEADERS)
+    assert detail.status_code == 200
+    data = detail.json()
+    assert data["snapshots"]["freight_option"]["manual_only"] is True
+    assert data["snapshots"]["products"][0]["sku"] == "DEMO-BOOK"
+    timeline = data["timeline"]
+    assert any(event["source"] == "local_store" for event in timeline)
+    assert any(event["source"] == "simulated" for event in timeline)
+    admin_events = [event for event in timeline if event["source"] == "local_admin"]
+    assert len(admin_events) == len(stages)
+    assert [event["internal_status"] for event in admin_events] == stages
+    assert [event["occurred_at"] for event in admin_events] == sorted(
+        event["occurred_at"] for event in admin_events
+    )
+    assert all(event["external_status"] is None for event in timeline)
+    assert admin_events[-1]["internal_status"] == "entregue_simulado"
+    filtered = await http.get(
+        "/api/admin/orders?order_status=paid_simulated&fulfillment_status=entregue_simulado",
+        headers=ADMIN_HEADERS,
+    )
+    assert filtered.status_code == 200 and filtered.json()["total"] == 1
+    assert provider.by_key  # only the previously-created synthetic quote was requested
+
+
+async def test_admin_fulfillment_rejects_invalid_and_stale_transitions(shop):
+    http, db, _ = shop
+    cart, _ = await setup_quote(http, db)
+    order = (await create_order(http, cart)).json()
+    order = (await confirm(http, order, "approved")).json()
+    path = f"/api/admin/orders/{order['id']}/fulfillment"
+    invalid = await http.post(
+        path,
+        headers=ADMIN_HEADERS,
+        json={"expected_status": "pago_simulado", "status": "entregue_simulado"},
+    )
+    assert invalid.status_code == 409
+    stale = await http.post(
+        path,
+        headers=ADMIN_HEADERS,
+        json={"expected_status": "embalado", "status": "separando"},
+    )
+    assert stale.status_code == 409
+    with Session(db) as session:
+        fulfillment = session.scalar(
+            select(m.Fulfillment).where(m.Fulfillment.order_id == UUID(order["id"]))
+        )
+        assert fulfillment.status == FulfillmentStatus.PAID_SIMULATED

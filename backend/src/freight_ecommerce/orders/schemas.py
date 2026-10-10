@@ -6,6 +6,15 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from freight_ecommerce.domain.states import FulfillmentStatus, OrderStatus, PaymentStatus
 
+AdminFulfillmentStatus = Literal[
+    "separando",
+    "embalado",
+    "pronto_para_importacao",
+    "importacao_pendente",
+    "expedido_simulado",
+    "entregue_simulado",
+]
+
 
 class CreateOrder(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -73,3 +82,33 @@ class OrderView(BaseModel):
 class OrderList(BaseModel):
     items: list[OrderView]
     total: int
+
+
+class AdminOrderList(BaseModel):
+    items: list[OrderView]
+    total: int
+
+
+class AdminFulfillmentTransition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    expected_status: FulfillmentStatus
+    status: AdminFulfillmentStatus
+
+
+class AdminTimelineEvent(BaseModel):
+    id: UUID
+    occurred_at: datetime
+    source: Literal["local_store", "local_admin", "simulated", "packsenvios"]
+    event_key: str
+    title: str
+    internal_status: str | None
+    external_status: str | None
+    snapshot: dict
+
+
+class AdminOrderDetail(BaseModel):
+    order: OrderView
+    snapshots: dict
+    internal_fulfillment_status: FulfillmentStatus | None
+    external_status: str | None
+    timeline: list[AdminTimelineEvent]

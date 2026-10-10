@@ -50,6 +50,27 @@ export const orderSchema = z.object({
 });
 export type LocalOrder = z.infer<typeof orderSchema>;
 const orderListSchema = z.object({ items: z.array(orderSchema), total: integer });
+const adminTimelineEventSchema = z.object({
+  id: z.uuid(),
+  occurred_at: z.iso.datetime({ offset: true }),
+  source: z.enum(['local_store', 'local_admin', 'simulated', 'packsenvios']),
+  event_key: z.string(),
+  title: z.string(),
+  internal_status: z.string().nullable(),
+  external_status: z.string().nullable(),
+  snapshot: z.record(z.string(), z.json()),
+});
+const adminOrderDetailSchema = z.object({
+  order: orderSchema,
+  snapshots: z.record(z.string(), z.json()),
+  internal_fulfillment_status: fulfillment.shape.status.nullable(),
+  external_status: z.string().nullable(),
+  timeline: z.array(adminTimelineEventSchema),
+});
+const adminOrderListSchema = orderListSchema;
+export type AdminOrderDetail = z.infer<typeof adminOrderDetailSchema>;
+export type AdminFulfillmentStatus = z.infer<typeof fulfillment.shape.status>;
+const adminHeaders = (key: string) => ({ 'X-Local-Admin-Key': key });
 
 export function createLocalOrder(cartId: string, expectedRevision: number, submissionKey: string) {
   return requestInternal(`/api/carts/${z.uuid().parse(cartId)}/orders`, orderSchema, {
@@ -81,4 +102,42 @@ export function listLocalOrders(cartId: string, page = 1, pageSize = 20, signal?
   return requestInternal(`/api/carts/${z.uuid().parse(cartId)}/orders?${params}`, orderListSchema, {
     signal,
   });
+}
+
+export function listAdminOrders(
+  key: string,
+  filters: { orderStatus?: string; fulfillmentStatus?: string },
+  signal?: AbortSignal,
+) {
+  const params = new URLSearchParams({ page: '1', page_size: '100' });
+  if (filters.orderStatus) params.set('order_status', filters.orderStatus);
+  if (filters.fulfillmentStatus) params.set('fulfillment_status', filters.fulfillmentStatus);
+  return requestInternal(`/api/admin/orders?${params}`, adminOrderListSchema, {
+    signal,
+    headers: adminHeaders(key),
+  });
+}
+
+export function getAdminOrder(key: string, orderId: string, signal?: AbortSignal) {
+  return requestInternal(`/api/admin/orders/${z.uuid().parse(orderId)}`, adminOrderDetailSchema, {
+    signal,
+    headers: adminHeaders(key),
+  });
+}
+
+export function transitionAdminFulfillment(
+  key: string,
+  orderId: string,
+  expectedStatus: AdminFulfillmentStatus,
+  status: Exclude<AdminFulfillmentStatus, 'pago_simulado' | 'cancelado'>,
+) {
+  return requestInternal(
+    `/api/admin/orders/${z.uuid().parse(orderId)}/fulfillment`,
+    adminOrderDetailSchema,
+    {
+      method: 'POST',
+      body: { expected_status: expectedStatus, status },
+      headers: adminHeaders(key),
+    },
+  );
 }

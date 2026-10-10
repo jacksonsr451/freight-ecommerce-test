@@ -25,6 +25,7 @@ interface RequestOptions {
   method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
   body?: unknown;
   signal?: AbortSignal;
+  headers?: Record<string, string>;
 }
 
 function internalPath(path: string): string {
@@ -70,6 +71,7 @@ export async function requestInternal<T>(
       headers: {
         Accept: 'application/json',
         ...(options.body === undefined ? {} : { 'Content-Type': 'application/json' }),
+        ...options.headers,
       },
       signal: options.signal,
       ...(options.body === undefined ? {} : { body: JSON.stringify(options.body) }),
