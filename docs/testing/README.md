@@ -53,3 +53,14 @@ do arquivo binário 17.11, executa `initdb`, escolhe uma porta loopback disponí
 e encerra o cluster com `pg_ctl`. No Linux o container declara Docker healthcheck, e o step espera o
 estado `healthy`. Ambos executam `migrate`, `migration-check` e a suíte via jsr-testrunner contra banco
 descartável. O resultado do runner Linux container não substitui o resultado de Actions no host Linux.
+
+## Dependency review no PR #8
+
+No PR #8 a GitHub Dependency Review Action respondeu que o Dependency Graph não está habilitado neste
+repositório. O workflow não executa mais essa action. O Ruleset `main` foi atualizado para remover o
+contexto incompatível `dependency-review` e requerer `dependency-audit`, que usa `pip-audit` sobre
+`backend/.venv` e `npm audit` sobre o lockfile.
+
+O Ruleset `main` mantém `test (ubuntu-latest)` e `test (windows-latest)` obrigatórios, exige uma aprovação
+incluindo Code Owner, permite somente squash, bloqueia force-push/exclusão e concede bypass de pull
+request somente ao usuário proprietário. A alteração foi aplicada via API autenticada.

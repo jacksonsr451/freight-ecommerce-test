@@ -13,7 +13,8 @@ All notable changes to this project are documented here. This project follows
 - MIT license, contributor and security policies, support instructions, GitHub issue templates, and
   Dependabot configuration.
 - Architecture, development, testing, local demonstration, security, troubleshooting, and ADR guides.
-- Dependency-review and Python/npm audit steps in GitHub Actions.
+- Python/npm dependency-audit fallback under the required `dependency-audit` check context in GitHub
+  Actions because the GitHub Dependency Review action is unsupported without the repository graph.
 - Third-party notices for the LGPL-licensed PostgreSQL driver, frontend data/license notices, Docker
   base images, and the contract reference whose redistribution terms are unverified.
 

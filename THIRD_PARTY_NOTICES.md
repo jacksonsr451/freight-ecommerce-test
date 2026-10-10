@@ -49,10 +49,11 @@ remain attached to those package distributions. Re-audit after dependency update
 
 ## CI actions
 
-The GitHub workflow uses `actions/checkout`, `actions/setup-python`, `actions/setup-node`,
-`actions/dependency-review-action`, and `pypa/gh-action-pip-audit`. Their upstream repositories publish
-their own licenses (MIT for the `actions/*` and dependency-review actions; Apache-2.0 for
-`gh-action-pip-audit`). CI actions are not bundled into the application image.
+The GitHub workflow uses `actions/checkout`, `actions/setup-python`, `actions/setup-node`, and
+`pypa/gh-action-pip-audit`. Their upstream repositories publish their own licenses (MIT for the
+`actions/*` actions; Apache-2.0 for `gh-action-pip-audit`). CI actions are not bundled into the
+application image. The GitHub Dependency Review action was removed because the repository dependency
+graph is not enabled.
 
 ## Docker images
 
