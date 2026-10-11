@@ -27,7 +27,9 @@ limites efetivos e as pendências atuais.
 `npm audit --audit-level=high` foi executado durante esta auditoria e retornou zero vulnerabilidades
 conhecidas. `pip-audit` 2.10.1 não encontrou vulnerabilidades conhecidas nas dependências Python de
 terceiros instaladas; informou que o pacote local não foi auditado porque não está publicado no PyPI.
-O workflow também audita o virtualenv Poetry, e a dependency review action roda em pull requests.
+O workflow audita o virtualenv Poetry e roda `npm audit`. Como a GitHub Dependency Review Action não
+funciona neste repo enquanto o Dependency Graph estiver desativado, o check obrigatório
+`dependency-audit` roda os audits compatíveis.
 Esses scanners não substituem revisão de código, verificação de licença ou homologação do provedor.
 
 Canal privado de vulnerabilidades e contato privado do Code of Conduct ainda precisam ser configurados

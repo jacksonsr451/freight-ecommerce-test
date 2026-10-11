@@ -74,7 +74,7 @@ python scripts/dev.py down
 portas temporários próprios, verifica saúde/proxy/diagnóstico e remove somente seu volume temporário.
 Nunca use `docker compose down --volumes` no projeto normal se precisar preservar dados locais.
 
-Para executar a suíte Python em container com PostgreSQL 17 e dependências de teste isolados:
+Para executar a suíte Python em container com PostgreSQL 17.11 e dependências de teste isolados:
 
 ```powershell
 python scripts/dev.py compose-test

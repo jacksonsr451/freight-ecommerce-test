@@ -100,7 +100,7 @@ docker compose ps
 python scripts/dev.py down
 ```
 
-Compose é destinado ao desenvolvimento: PostgreSQL 17, FastAPI e Vite com healthchecks.
+Compose é destinado ao desenvolvimento: PostgreSQL 17.11, FastAPI e Vite com healthchecks.
 Portas podem ser configuradas em `.env` (`POSTGRES_PORT`, `BACKEND_PORT`, `FRONTEND_PORT`).
 Credenciais do exemplo são somente sintéticas/locais. No host, ajuste também `VITE_PROXY_TARGET`
 ao mudar a porta da API. No Compose, proxy usa `http://backend:8000`.

@@ -1,5 +1,8 @@
 # Compatibilidade e evidências — prompt 18
 
+> Registro histórico de prompt 18: a tabela abaixo descreve aquela execução. O Compose/CI atual usa
+> PostgreSQL 17.11; consulte `docs/testing/README.md` para a correção de provisionamento.
+
 ## Raiz efetiva e ferramentas
 
 A raiz é o diretório que contém este README, `docker-compose.yml`, `backend/` e `frontend/`.

@@ -12,6 +12,8 @@ external access, a production deployment, or provider behavior absent from the c
 - Server-side Packsenvios quote client plus gated import, dispatch, tracking-refresh, and webhook paths
   whose real use requires authorized configuration; local scenarios remain synthetic.
 - Windows/Linux development tasks, jsr-testrunner test suite, frontend tests, and Compose test profile.
+- Active `main` Ruleset requires Windows/Linux tests, Code Owner review, squash-only merges, and protects
+  deletion/force-push; a pull-request bypass is limited to the repository owner.
 
 ## In progress / verification pending
 

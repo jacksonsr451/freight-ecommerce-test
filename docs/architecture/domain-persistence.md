@@ -1,5 +1,8 @@
 # 03 — Modelo de domínio e persistência
 
+> **Evidência histórica:** as versões PostgreSQL registradas na execução inicial refletem aquela
+> rodada. O Compose/CI atual usa PostgreSQL 17.11.
+
 Raiz: `E:\Softwares\joao\tests`. PostgreSQL + SQLAlchemy 2 + psycopg + Alembic.
 Os pré-requisitos de conexão/migrations ausentes após o bootstrap foram incluídos nesta etapa.
 O healthcheck permanece liveness; nenhuma conexão/migration é executada no startup da API.
