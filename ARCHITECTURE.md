@@ -22,7 +22,7 @@ FastAPI application factory ── SQLAlchemy 2 / psycopg ── PostgreSQL
 - **Backend:** FastAPI app factory at `backend/src/freight_ecommerce/main.py`. Routers cover catalog,
   carts, quote orchestration, simulated orders, guarded local admin, import/dispatch/tracking adapters,
   webhook receipts and diagnostics.
-- **Persistence:** PostgreSQL 17, SQLAlchemy ORM with synchronous sessions/transactions, Psycopg and
+- **Persistence:** PostgreSQL 17.11, SQLAlchemy ORM with synchronous sessions/transactions, Psycopg and
   Alembic revisions `0001`–`0006`. Tests operate on random owned schemas. Compose's normal DB volume is
   persistent; its test profile uses a temporary project/volume.
 - **External HTTP:** HTTPX `AsyncClient` is created on the backend, uses the configured Bearer only on

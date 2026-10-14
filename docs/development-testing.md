@@ -84,7 +84,7 @@ python scripts/dev.py compose-test
 
 `test` executa jsr-testrunner e Vitest; `backend-test` executa somente Python. `check` roda o runner,
 Ruff, ESLint, Prettier, Vitest, typecheck, build e matriz contratual. `compose-test` constrói a imagem
-de teste com Poetry `dev`, sobe PostgreSQL 17 numa stack Compose isolada e executa testrunner; o
+de teste com Poetry `dev`, sobe PostgreSQL 17.11 numa stack Compose isolada e executa testrunner; o
 cleanup remove volume/rede/container temporários mesmo em caso de falha. A imagem de backend runtime
 usa apenas dependências `main`.
 

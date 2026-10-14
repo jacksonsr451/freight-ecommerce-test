@@ -1,6 +1,6 @@
 # Infraestrutura de desenvolvimento
 
-`docker-compose.yml` na raiz define PostgreSQL 17 com volume persistente,
+`docker-compose.yml` na raiz define PostgreSQL 17.11 com volume persistente,
 backend FastAPI e frontend Vite, com healthchecks e portas expostas apenas em loopback.
 Dockerfiles usam os lockfiles do projeto e não copiam `.env` ou dependências do host.
 Os processos de aplicação/teste rodam como usuários não-root dentro dos containers. O Dockerfile de

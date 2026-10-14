@@ -38,3 +38,29 @@ Packsenvios.
 O teste browser `test_store_browser` requer Node/dependências frontend e Edge no Windows ou Chromium
 Playwright no Linux. Quando esses requisitos não existem, o runner registra SKIP com motivo. O CI
 configura browser nos dois sistemas; uma execução com SKIP não prova jornada browser naquele ambiente.
+
+## Validação do provisionamento CI/PostgreSQL 17.11
+
+| Ambiente realmente executado neste workspace | Resultado |
+|---|---|
+| Windows 10/11, binários oficiais EDB 17.11, `initdb`/`pg_ctl`, porta loopback aleatória | PASS; `pg_isready`, migration e migration-check passaram; `python scripts/dev.py check` executou 280/280 Python e 54/54 Vitest, incluindo browser Edge; cluster temporário parado ao final. |
+| Linux container `postgres:17.11-alpine` pelo Compose test profile | PASS; 279 Python passaram e o browser test foi SKIP porque a imagem backend-test não contém Node/Chromium. Projeto, container, rede e volume temporários removidos. |
+| Linux Node 24 container (imagem frontend local) | PASS; ESLint, Prettier, 54/54 Vitest, typecheck e build. |
+| GitHub-hosted `ubuntu-latest`/`windows-latest` Actions | PENDING; workflow provisiona PostgreSQL 17.11 por container Linux e cluster EDB temporário Windows, mas nenhum run remoto foi observado. |
+
+O workflow Windows não consulta nem presume nome/estado de serviço PostgreSQL instalado: verifica SHA-256
+do arquivo binário 17.11, executa `initdb`, escolhe uma porta loopback disponível, aguarda `pg_isready`
+e encerra o cluster com `pg_ctl`. No Linux o container declara Docker healthcheck, e o step espera o
+estado `healthy`. Ambos executam `migrate`, `migration-check` e a suíte via jsr-testrunner contra banco
+descartável. O resultado do runner Linux container não substitui o resultado de Actions no host Linux.
+
+## Dependency review no PR #8
+
+No PR #8 a GitHub Dependency Review Action respondeu que o Dependency Graph não está habilitado neste
+repositório. O workflow não executa mais essa action. O Ruleset `main` foi atualizado para remover o
+contexto incompatível `dependency-review` e requerer `dependency-audit`, que usa `pip-audit` sobre
+`backend/.venv` e `npm audit` sobre o lockfile.
+
+O Ruleset `main` mantém `test (ubuntu-latest)` e `test (windows-latest)` obrigatórios, exige uma aprovação
+incluindo Code Owner, permite somente squash, bloqueia force-push/exclusão e concede bypass de pull
+request somente ao usuário proprietário. A alteração foi aplicada via API autenticada.
