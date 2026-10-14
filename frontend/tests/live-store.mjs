@@ -14,6 +14,13 @@ try {
   const writes = [];
   const checkoutWrites = [];
   const external = [];
+  const catalogResponses = [];
+  page.on('response', (response) => {
+    const url = new URL(response.url());
+    if (url.pathname === '/api/products') {
+      catalogResponses.push(`${response.status()} ${url.pathname}${url.search}`);
+    }
+  });
   page.on('request', (request) => {
     const url = new URL(request.url());
     if (url.hostname !== '127.0.0.1') external.push(request.url());
@@ -48,9 +55,25 @@ try {
     }
     assert(!Object.keys(request.headers()).includes('authorization'));
   });
+  const openDemoBook = async () => {
+    const productLink = page.getByRole('link', {
+      name: 'Livro sintético de demonstração',
+      exact: true,
+    });
+    try {
+      await expect(productLink).toBeVisible({ timeout: 30000 });
+    } catch (error) {
+      const pageText = await page.locator('body').innerText();
+      throw new Error(
+        `${error.message}\nCatalog page text: ${pageText}\nProduct API responses: ${catalogResponses.join(', ') || 'none'}`,
+        { cause: error },
+      );
+    }
+    await productLink.click();
+  };
   await page.goto(`${process.env.LIVE_STORE_URL}/catalogo`);
   await expect(page.getByText('Mock · cotação sintética')).toBeVisible();
-  await page.getByRole('link', { name: 'Livro sintético de demonstração', exact: true }).click();
+  await openDemoBook();
   await expect(page.getByRole('heading', { level: 1 })).toHaveText(
     'Livro sintético de demonstração',
   );
@@ -80,7 +103,7 @@ try {
   );
   assert.deepEqual(external, []);
   await page.goto(`${process.env.LIVE_STORE_URL}/catalogo`);
-  await page.getByRole('link', { name: 'Livro sintético de demonstração', exact: true }).click();
+  await openDemoBook();
   await page.getByLabel('Quantidade', { exact: true }).fill('2');
   const addSecondOrder = page.getByRole('button', { name: 'Adicionar ao carrinho' });
   await expect(addSecondOrder).toBeEnabled();

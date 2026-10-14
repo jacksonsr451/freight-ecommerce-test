@@ -27,7 +27,7 @@ Não use npm no diretório backend.
 
 ## PostgreSQL, migrations e testes
 
-Use PostgreSQL de desenvolvimento/teste em loopback. O Compose local também inicia PostgreSQL 17:
+Use PostgreSQL de desenvolvimento/teste em loopback. O Compose local também inicia PostgreSQL 17.11:
 
 ```bash
 python3 scripts/dev.py up
@@ -71,7 +71,7 @@ python3 scripts/dev.py down
 temporário exclusivo, verifica backend, banco e proxy e remove somente esses recursos próprios.
 Compose aguarda healthchecks, mas migrations e seed continuam explícitos.
 
-Para executar a suíte Python no container de teste isolado, incluindo PostgreSQL 17 efêmero:
+Para executar a suíte Python no container de teste isolado, incluindo PostgreSQL 17.11 efêmero:
 
 ```bash
 python3 scripts/dev.py compose-test

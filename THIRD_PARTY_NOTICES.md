@@ -49,14 +49,15 @@ remain attached to those package distributions. Re-audit after dependency update
 
 ## CI actions
 
-The GitHub workflow uses `actions/checkout`, `actions/setup-python`, `actions/setup-node`,
-`actions/dependency-review-action`, and `pypa/gh-action-pip-audit`. Their upstream repositories publish
-their own licenses (MIT for the `actions/*` and dependency-review actions; Apache-2.0 for
-`gh-action-pip-audit`). CI actions are not bundled into the application image.
+The GitHub workflow uses `actions/checkout`, `actions/setup-python`, `actions/setup-node`, and
+`pypa/gh-action-pip-audit`. Their upstream repositories publish their own licenses (MIT for the
+`actions/*` actions; Apache-2.0 for `gh-action-pip-audit`). CI actions are not bundled into the
+application image. The GitHub Dependency Review action was removed because the repository dependency
+graph is not enabled.
 
 ## Docker images
 
-The Dockerfiles use `python:3.11-slim`, `node:24-alpine`, and Compose uses `postgres:17-alpine`. These
+The Dockerfiles use `python:3.11-slim`, `node:24-alpine`, and Compose uses `postgres:17.11-alpine`. These
 images contain operating-system packages in addition to Python/Node/PostgreSQL; retain the upstream
 image package/license notices when redistributing a built image. Tags are not digest-pinned, and no
 container SBOM/license scan was available during this audit. The project does not republish those base
